@@ -7,10 +7,10 @@
 | 类别 | 状态 | 说明 |
 |------|------|------|
 | 法律身份 | ✅ 完成 | LICENSE (Apache 2.0) / NOTICE / CODE_OF_CONDUCT / SECURITY / CHANGELOG / .gitignore / .editorconfig |
-| 目录骨架 | ✅ 完成 | assets/{schemas,templates,dashboard} / scripts / docs / adapters/codebuddy / examples / pipeline-output |
+| 目录骨架 | ✅ 完成 | assets/{schemas,templates,dashboard} / scripts / docs / ide-integrations/codebuddy / examples / pipeline-output |
 | Layer 0 资产 | ✅ 完成 | 5 schemas + 8 templates + config.default.yaml + dashboard/template.html |
 | 脚本迁移 | ✅ 完成 | 11 个脚本 + 1 个 `_env.sh` 路径解析 |
-| IDE 集成 | ✅ 完成 | 9 个 slash command 迁到 `adapters/codebuddy/commands/pl/` |
+| IDE 集成 | ✅ 完成 | 9 个 slash command 迁到 `ide-integrations/codebuddy/commands/pl/` |
 | 通用性改造 | ✅ 完成 | config 的 piao_integration 泛化为 upstream_protocol (默认关闭) |
 | 端到端验收 | ✅ 通过 | 独立目录脚本对宿主 `pl/changes/` 生效（见下） |
 
