@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pl-pipeline.dev/piao/schemas/event.schema.json",
+  "title": "piao L1 Event",
+  "description": "piao-pipeline L1 kernel event per kernel/03-layered-architecture.md §3.1 + §4. Events are written to append-only JSONL journals at $PL_OUTPUT/piao/kernel-events/<YYYY-MM>.jsonl. Immutability guaranteed by §4.1 bottom line 1.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_layer",
+    "emitted_at",
+    "emitted_by",
+    "subject"
+  ],
+  "properties": {
+    "event_id": {
+      "description": "Event identity. Format: <domain>-<YYMMDDHHmmss>-<6-char suffix>. Suffix is normally 6 hex chars for new events; historical events (pre-M7 prefix taxonomy decision) may use other 3-10 char identifiers such as 'rpt001'. See kernel/01-identity-model.md §5 and kernel/03-layered-architecture.md §4.1.",
+      "type": "string",
+      "pattern": "^[a-z_]+(-[a-z_]+)*-[0-9]{12}-[a-zA-Z0-9]{3,10}$",
+      "examples": [
+        "task-260419151700-a9b94e",
+        "drift-detected-260421213000-aaaaaa",
+        "snap-published-260421213050-vx7wyi",
+        "artifact-published-260419223000-rpt001"
+      ]
+    },
+    "event_type": {
+      "description": "L1 event type from the locked 10-class enum per §3.1. Extensions require kernel spec rev bump.",
+      "type": "string",
+      "enum": [
+        "artifact.published",
+        "artifact.superseded",
+        "task.started",
+        "task.finished",
+        "stage.entered",
+        "stage.exited",
+        "drift.detected",
+        "evolution.scanned",
+        "taskdag.planned",
+        "pipeline.stage_entered"
+      ]
+    },
+    "event_layer": {
+      "description": "Event layer. L1 = kernel (this schema); L2 = adapter-defined business events (see §5).",
+      "type": "string",
+      "const": "L1"
+    },
+    "emitted_at": {
+      "description": "ISO 8601 datetime with timezone. UTC preferred for deterministic ordering.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "emitted_by": {
+      "description": "Actor URN that emitted this event. Typically an agent or manual tool URN.",
+      "type": "string"
+    },
+    "subject": {
+      "description": "The URN this event is about. See kernel/01-identity-model.md §5.3 subject+semantic-field dual-track rule.",
+      "$ref": "urn.schema.json"
+    },
+    "producer_task_urn": {
+      "description": "Task URN that produced the subject artifact. Applies to artifact.* events.",
+      "$ref": "urn.schema.json"
+    },
+    "artifact_urn": {
+      "description": "Semantic field for artifact.* events; must equal subject when present (§5.3).",
+      "$ref": "urn.schema.json"
+    },
+    "content_sha256": {
+      "description": "Artifact content sha256 (lowercase hex). Optional for historical events; required for all new artifact.published events per M7 §2 three-tuple (URN + rev + sha256) contract.",
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        { "type": "null" }
+      ]
+    },
+    "artifact_kind": {
+      "description": "Short alias of subject's kind segment. Convenience field for filtering, not authoritative. See urn.schema.json#/$defs/kind.",
+      "$ref": "urn.schema.json#/$defs/kind"
+    },
+    "artifact_type": {
+      "description": "Finer-grained type derived from front-matter kind: per kernel/02-artifact-model.md §2.2.4 type registration.",
+      "type": "string"
+    },
+    "published_at": {
+      "description": "When the subject artifact was logically published. Often equal to emitted_at but can differ for reconstructed events (§5.3.1 historical compatibility).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "reconstructed": {
+      "description": "True iff this event is a back-fill for a historical artifact. See §5.3.1.",
+      "type": "boolean"
+    },
+    "reconstructed_at": {
+      "description": "When the back-fill happened (if reconstructed=true).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "reconstructed_from": {
+      "description": "Free-text provenance reason for the back-fill.",
+      "type": "string"
+    },
+    "supersedes": {
+      "description": "URN of the artifact this one replaces (applicable to artifact.published / artifact.superseded).",
+      "$ref": "urn.schema.json"
+    },
+    "resolves": {
+      "description": "Debt-ledger item IDs this event resolves (e.g. [\"Q29\"]).",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "drift_artifact_urn": {
+      "description": "drift.detected specific: the drift artifact URN.",
+      "$ref": "urn.schema.json"
+    },
+    "drift_artifact_sha256": {
+      "description": "drift.detected specific: sha256 of the drift artifact body.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "drift_kind": {
+      "description": "drift.detected specific: drift classification per kernel/05-drift-propagation.md §3.5.",
+      "type": "string",
+      "enum": ["initial_snapshot", "content_drift", "no_change_drift"]
+    },
+    "attribution_mode": {
+      "description": "drift.detected specific: per kernel/05-drift-propagation.md §5.1.",
+      "type": "string",
+      "enum": ["full", "sha_only"]
+    },
+    "scope_urn": {
+      "description": "drift.detected / evolution.scanned specific.",
+      "$ref": "urn.schema.json"
+    },
+    "scope_kind": {
+      "description": "drift.detected specific: the scope kind matching source snapshots.",
+      "type": "string",
+      "enum": ["unit", "stage", "taskdag", "adapter", "kernel"]
+    },
+    "drift_event_urn": {
+      "description": "evolution.scanned specific: URN of the drift.detected event being scanned.",
+      "type": "string"
+    },
+    "decision": {
+      "description": "evolution.scanned specific: 4-A pure-observation is always pass_through per m6-final-decisions §1 R4/R5.",
+      "type": "string",
+      "enum": ["pass_through"]
+    },
+    "evidence": {
+      "description": "Optional evidence object carrying provenance details (sha / event_id / ...).",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "content_sha256_note": {
+      "description": "Human-readable note about the sha value (e.g. historical_untraceable, final rev byte-traceable).",
+      "type": "string"
+    },
+    "event_id_prefix_note": {
+      "description": "Annotation when event_id prefix reflects M7 taxonomy decisions (Q29 B'-1).",
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

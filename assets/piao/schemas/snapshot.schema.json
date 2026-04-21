@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pl-pipeline.dev/piao/schemas/snapshot.schema.json",
+  "title": "piao Snapshot Artifact",
+  "description": "piao-pipeline snapshot artifact schema per kernel/04-version-snapshot.md §3.2 + §3.2.1 + §3.3 + §4. Produced by scripts/piao-snapshot-produce.sh. Five-step canonical YAML normalization guarantees reproducible content_sha256.",
+  "type": "object",
+  "required": [
+    "urn",
+    "kind",
+    "artifact_type",
+    "rev",
+    "status",
+    "schema_version",
+    "produced_by",
+    "produced_at",
+    "frozen_scope",
+    "content_sha256",
+    "frozen_artifacts"
+  ],
+  "properties": {
+    "urn": {
+      "description": "Snapshot URN per §4.1. Format: urn:piao:snapshot:<scope>:<name>@<rev>",
+      "type": "string",
+      "pattern": "^urn:piao:snapshot:[a-z0-9_/]+:[a-z0-9_]+@v[0-9]+$"
+    },
+    "kind": {
+      "type": "string",
+      "const": "snapshot"
+    },
+    "artifact_type": {
+      "type": "string",
+      "const": "snapshot"
+    },
+    "rev": {
+      "description": "Snapshot revision. §4.2 forbids minor revisions for snapshots; only v1/v2/v3... allowed.",
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "published", "superseded"]
+    },
+    "supersedes": {
+      "description": "URN of the snapshot this replaces, or null for first revision.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ]
+    },
+    "schema_version": {
+      "description": "Version of this schema that the snapshot claims compliance with.",
+      "type": "string"
+    },
+    "produced_by": {
+      "type": "object",
+      "required": ["actor", "task_urn", "event_id", "trigger_event_type"],
+      "properties": {
+        "actor": {
+          "description": "Agent or user URN that produced the snapshot.",
+          "type": "string"
+        },
+        "task_urn": {
+          "description": "Task URN under which this snapshot was produced.",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Pre-reserved event_id for the artifact.published event (to be written when the event journal is appended).",
+          "type": "string",
+          "pattern": "^[a-z_]+-[0-9]{12}-[0-9a-f]{6}$"
+        },
+        "trigger_event_type": {
+          "description": "Which event triggered the snapshot. §2.1 enum.",
+          "type": "string",
+          "enum": ["stage.entered", "stage.exited", "task.finished"]
+        }
+      }
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "frozen_scope": {
+      "description": "The scope whose state is frozen. §3.3 five enumerated scope_kinds.",
+      "type": "object",
+      "required": ["scope_kind", "scope_ref"],
+      "properties": {
+        "scope_kind": {
+          "type": "string",
+          "enum": ["unit", "stage", "taskdag", "adapter", "kernel"]
+        },
+        "scope_ref": {
+          "description": "URN of the scoped entity.",
+          "type": "string"
+        }
+      }
+    },
+    "content_sha256": {
+      "description": "sha256 of the canonical YAML serialization of frozen_artifacts (§3.2.1 five-step).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "frozen_artifacts": {
+      "description": "List of artifact identities frozen in this snapshot, sorted by artifact_urn UTF-8 byte order (§3.2.1 step 3).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "artifact_urn",
+          "content_sha256",
+          "producer_event_id",
+          "producer_task_urn",
+          "artifact_type"
+        ],
+        "properties": {
+          "artifact_urn": { "type": "string" },
+          "content_sha256": {
+            "oneOf": [
+              { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              { "type": "string", "pattern": "^[0-9a-f]+$" },
+              { "type": "null" }
+            ]
+          },
+          "producer_event_id": { "type": "string" },
+          "producer_task_urn": { "type": "string" },
+          "artifact_type": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

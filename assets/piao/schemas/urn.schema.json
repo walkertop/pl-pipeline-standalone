@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pl-pipeline.dev/piao/schemas/urn.schema.json",
+  "title": "piao URN",
+  "description": "piao-pipeline URN format per kernel/01-identity-model.md §1.1 + §2. Format: urn:piao:<kind>:<scope>:<name>[@<rev>]",
+  "type": "string",
+  "pattern": "^urn:piao:[a-z_]+:[a-z0-9_/]+:[a-z0-9_]+(@v[0-9]+(\\.[0-9]+)?)?$",
+  "examples": [
+    "urn:piao:artifact:prop_confirm:structured_spec@v1",
+    "urn:piao:event_journal:prop_confirm:main",
+    "urn:piao:task:prop_confirm/dag:t_07",
+    "urn:piao:snapshot:prop_confirm:plan_entered@v2",
+    "urn:piao:drift:kernel:my_drift@v1",
+    "urn:piao:spec:architecture:identity_model@v1.3"
+  ],
+  "$defs": {
+    "kind": {
+      "description": "piao kind enumeration per kernel/01-identity-model.md §2.1 (core) + §2.2 (extended). This enum is the single source of truth; any change requires kernel spec rev bump + M1 ledger entry.",
+      "type": "string",
+      "enum": [
+        "artifact",
+        "spec",
+        "proposal",
+        "rule",
+        "evolution_source",
+        "task",
+        "taskdag",
+        "unit",
+        "stage",
+        "event_journal",
+        "snapshot",
+        "drift"
+      ]
+    },
+    "rev": {
+      "description": "Artifact revision suffix per §1.1. v<int> for major rev, v<int>.<int> for minor rev. snapshot/drift/evolution scan_result use major-only.",
+      "type": "string",
+      "pattern": "^v[0-9]+(\\.[0-9]+)?$"
+    }
+  }
+}
