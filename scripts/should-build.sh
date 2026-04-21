@@ -44,8 +44,12 @@ DIM='\033[2m'
 NC='\033[0m'
 
 # ---- 配置 -------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=./_env.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_env.sh"
+
+# PROJECT_ROOT 语义从"脚本父目录"改为"用户宿主项目"（$PL_PROJECT）
+# 允许通过 --project-root 或 PROJECT_ROOT 环境变量覆盖（向后兼容）
+PROJECT_ROOT="${PROJECT_ROOT:-$PL_PROJECT}"
 BUILD_MARKER="$PROJECT_ROOT/.codebuddy/.last-build-check"
 BUILD_SNAPSHOT="$PROJECT_ROOT/.codebuddy/.last-build-snapshot"
 
@@ -55,6 +59,13 @@ THRESHOLD_FILES="${SHOULD_BUILD_FILES:-5}"
 THRESHOLD_PAGES="${SHOULD_BUILD_PAGES:-2}"
 THRESHOLD_NEW_FILES="${SHOULD_BUILD_NEW_FILES:-3}"
 THRESHOLD_MINUTES="${SHOULD_BUILD_MINUTES:-30}"
+
+# 构建命令（由 adapter 注入，默认空字符串表示"无 adapter 场景下仅提示 --mark"）
+# 推荐在用户项目的 pl/config.yaml 或 pl/adapters/build.yaml 中配置：
+#   export PL_BUILD_CHECK_CMD="./gradlew :shared:compileDebugKotlinAndroid"  # KMM 项目
+#   export PL_BUILD_CHECK_CMD="npm run build"                                # Next.js 项目
+#   export PL_BUILD_CHECK_CMD="uv run pytest"                                # FastAPI 项目
+BUILD_CHECK_CMD="${PL_BUILD_CHECK_CMD:-}"
 
 # ---- 参数解析 ----------------------------------------------------------------
 MODE="check"
@@ -273,7 +284,11 @@ if $SHOULD_BUILD; then
     echo -e "  ${RED}▸${NC} $t"
   done
   echo ""
-  echo -e "${DIM}运行: ./gradlew :kuikly-dynamic-apk-builder:packSplitApkRelease${NC}"
+  if [[ -n "$BUILD_CHECK_CMD" ]]; then
+    echo -e "${DIM}运行: $BUILD_CHECK_CMD${NC}"
+  else
+    echo -e "${DIM}未配置构建命令（设置 PL_BUILD_CHECK_CMD 环境变量由 adapter 注入）${NC}"
+  fi
   echo -e "${DIM}完成后: ./scripts/should-build.sh --mark${NC}"
   exit 0
 else
