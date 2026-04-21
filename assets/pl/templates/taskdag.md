@@ -122,7 +122,7 @@ T4: 埋点方案 (可独立)
 
 ### T4: 埋点方案 `[无依赖]` `[预估: 0.5h]`
 
-**目标**: 定义页面埋点，对齐旧版 Weex 页面
+**目标**: 定义页面埋点，对齐旧版参考实现（若为迁移类 change）
 
 **埋点映射** (对齐旧版):
 | 事件 | 旧版 eventId | 新版实现位置 | 对应 F# |
@@ -158,7 +158,7 @@ T4: 埋点方案 (可独立)
 ## 集成验收 (Integration Gate)
 
 ### 编译验收
-- [ ] Android 编译通过: `./gradlew :kuikly-dynamic-apk-builder:distributeApkToStaticServerDebug`
+- [ ] 编译通过: `$PL_BUILD_CHECK_CMD`（由 adapter 注入，如 `npm run build` / `./gradlew ...` / `uv run pytest`）
 - [ ] 无编译警告（或警告已确认为安全）
 
 ### 功能验收
@@ -172,8 +172,8 @@ T4: 埋点方案 (可独立)
 - [ ] UI 层: 空状态/错误状态展示正确
 
 ### 静态检查
-- [ ] `./scripts/lint.sh` 通过
-- [ ] `./scripts/kuikly-migration-lint.sh` 通过（如适用）
+- [ ] adapter 提供的 lint 脚本通过（如 `./scripts/lint.sh` 或 `npm run lint`）
+- [ ] adapter 提供的迁移检查脚本通过（若为迁移类 change）
 
 ---
 

@@ -11,12 +11,12 @@
 
 | 字段 | 值 |
 |------|-----|
-| Change ID | `change-id` (kebab-case，如 `prop-confirm-migration`) |
+| Change ID | `change-id` (kebab-case，如 `add-user-login` / `migrate-checkout`) |
 | 变更类型 | 页面迁移 / 功能新增 / 架构重构 / 性能优化 / Bug 修复 |
-| 关联页面 ID | `page_id`（如有，对应 Config.kt 注册名） |
-| 业务域 | 交易 / 会员 / 活动 / 用户 / 营销 / 基础设施 |
+| 关联页面 ID | `page_id`（若涉及页面，对应技术栈的页面注册名） |
+| 业务域 | 由项目/adapter 定义（如 交易 / 会员 / 活动 / 用户 / 营销 / 基础设施） |
 | 用户入口 | 从哪里进入此页面/功能（如：订单列表 → 点击卡片） |
-| 对标旧实现 | Weex 源文件路径（如：`Weex/src/xxx.vue`）或 `无` |
+| 对标旧实现 | 旧代码源路径（如 `<legacy-source>/<path>`）或 `无` |
 | 复杂度预估 | 🔴高 / 🟡中 / 🟢低 |
 | 预估组件数 | 数字（基于 Screen Map 估算） |
 
@@ -162,7 +162,7 @@
 
 | 资料 | 路径/链接 |
 |------|----------|
-| 旧版源码 | `Weex/src/xxx.vue` |
+| 旧版源码 | `<legacy-source-path>`（若为迁移类 change） |
 | 设计稿 | Figma 链接 / 截图路径 |
 | PRD | 文档链接 |
-| 接口文档 | ifBook 链接 |
+| 接口文档 | API 文档链接（如 ifBook / Swagger / OpenAPI） |

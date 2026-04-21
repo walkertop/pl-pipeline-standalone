@@ -76,9 +76,9 @@
 
 | 工具 | 用途 | 脚本入口 |
 |------|------|---------|
-| detekt | 静态检查 | `scripts/lint.sh` |
-| Gradle | 编译验证 | `./gradlew :kuikly-dynamic-apk-builder:distributeApkToStaticServerDebug` |
-| ApiSelfCheck | Mock 降级测试 | kotlin API |
+| 静态分析 | 静态检查 | `$LINT_CMD`（由 adapter 注入，如 `scripts/lint.sh` / `npm run lint` / `ruff check`） |
+| 编译工具 | 编译验证 | `$PL_BUILD_CHECK_CMD`（由 adapter 注入） |
+| ApiSelfCheck | Mock 降级测试 | 项目自定义 API 自检实现 |
 | Logcat Analyzer | 运行时日志分析 | `scripts/migration-logcat-analyzer.sh` |
 | Auto-Test | UI 截图对比 | `scripts/auto-test-runner.sh` |
 

@@ -44,8 +44,8 @@
 ## Artifacts（产物清单）
 
 ### 页面入口（迁移类 change 专用）
-- kuikly_page: page/<page_id>/<PageName>.kt
-- page_ui: page/<page_id>/PageUI.kt
+- page_entry: `<new-path>/<PageName>.<ext>`
+- page_ui: `<new-path>/PageUI.<ext>`
 
 ### 数据层
 - models: [page/<page_id>/data/<PageName>Models.kt]
@@ -76,8 +76,8 @@
 
 | 层 | 状态 | 详情 |
 |----|------|------|
-| 静态检查 (lint) | <✅ PASS / ❌ FAIL / ⏭️ SKIP> | <detekt 结果摘要> |
-| 编译 (compile) | <✅ PASS / ❌ FAIL / ⏭️ SKIP> | <编译结果> |
+| 静态检查 (lint) | <✅ PASS / ❌ FAIL / ⏭️ SKIP> | <adapter 提供的 lint 工具结果摘要> |
+| 编译 (compile) | <✅ PASS / ❌ FAIL / ⏭️ SKIP> | <$PL_BUILD_CHECK_CMD 结果> |
 | 网络层 (network) | <✅ PASS / ⚠️ WARN / ❌ FAIL / ⏭️ SKIP> | <Mock fallback 测试结果> |
 | 解析层 (parse) | <✅ PASS / ⚠️ WARN / ❌ FAIL / ⏭️ SKIP> | <宽松解析降级测试结果> |
 | 渲染层 (render) | <✅ PASS / ⚠️ WARN / ❌ FAIL / ⏭️ SKIP> | <组件渲染结果> |
