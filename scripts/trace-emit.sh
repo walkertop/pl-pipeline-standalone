@@ -4,9 +4,12 @@
 # =============================================================================
 #
 # 统一的事件写入接口。所有脚本通过 source 本文件后获得 trace_emit 系列函数，
-# 将可观测事件追加写入 pipeline-output/trace/{page_id}.events.jsonl (JSON Lines 格式)。
+# 将可观测事件追加写入 $PL_OUTPUT/trace/{page_id}.events.jsonl (JSON Lines)。
+#
+# 前置：调用方必须先 source _env.sh（会导出 $PL_OUTPUT）
 #
 # 用法:
+#   source "$(dirname "$0")/_env.sh"
 #   source "$(dirname "$0")/trace-emit.sh"
 #   trace_init "order_detail" "VERIFY" "script:migration-verify"
 #   trace_emit "check.run" '{"checker":"lint","status":"pass"}'
@@ -29,9 +32,19 @@
 _TRACE_EMIT_LOADED=1
 
 # ---- 目录和路径 ---------------------------------------------------------------
+# 优先级：$TRACE_DIR 显式覆盖 > $PL_OUTPUT/trace (_env.sh 提供) > 自探测兜底
+# 兜底路径仅在 _env.sh 未被 source 时使用（保持向后兼容）
 
-TRACE_PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-TRACE_DIR="${TRACE_DIR:-$TRACE_PROJECT_ROOT/build/trace}"
+if [[ -n "${TRACE_DIR:-}" ]]; then
+  : # 调用方显式指定，优先使用
+elif [[ -n "${PL_OUTPUT:-}" ]]; then
+  TRACE_DIR="$PL_OUTPUT/trace"
+else
+  # 兜底：_env.sh 未 source 时取脚本父目录的 pipeline-output/trace
+  _trace_fallback_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  TRACE_DIR="$_trace_fallback_root/pipeline-output/trace"
+  unset _trace_fallback_root
+fi
 mkdir -p "$TRACE_DIR"
 
 # ---- 全局 Trace 上下文 --------------------------------------------------------

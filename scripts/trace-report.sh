@@ -3,22 +3,22 @@
 # trace-report.sh — Pipeline Trace HTML 报告生成器
 # =============================================================================
 #
-# 从 build/trace/{page_id}.events.jsonl 读取事件，生成交互式 HTML 报告。
+# 从 $PL_OUTPUT/trace/{page_id}.events.jsonl 读取事件，生成交互式 HTML 报告。
 #
 # 用法:
 #   ./scripts/trace-report.sh --page order_detail
 #   ./scripts/trace-report.sh --page order_detail --trace-id order_detail_20260410_220000
 #   ./scripts/trace-report.sh --page order_detail --open
 #
-# 输出: pipeline-output/trace/{page_id}-report.html
+# 输出: $PL_OUTPUT/trace/{page_id}-report.html
 #
 # =============================================================================
 
+# shellcheck source=./_env.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_env.sh"
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TRACE_DIR="$PROJECT_ROOT/build/trace"
+TRACE_DIR="${TRACE_DIR:-$PL_OUTPUT/trace}"
 
 # ---- 颜色 -------------------------------------------------------------------
 RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
