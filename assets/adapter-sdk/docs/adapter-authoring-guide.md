@@ -325,3 +325,101 @@ piao_emit:
 
 > Adapter 是 pl-pipeline 的"场景翻译官"。写好一个 adapter，意味着你把这个
 > 技术栈下"**做得住**"的经验沉淀给了后面所有使用者。
+
+---
+
+## 附录 A：v0.1 后更新过的能力
+
+下面是 v0.1 首版之后陆续到位的 adapter 生态基础设施。写 adapter 时可以
+直接使用：
+
+### A.1 `scripts/adapter-create.sh` 脚手架
+
+一条命令生成合规骨架，省去手动拷贝现成 adapter 再改的麻烦：
+
+```bash
+# 最小骨架（只含 templates 和占位 adapter.yaml）
+bash $PL_HOME/scripts/adapter-create.sh my-stack
+
+# 完整骨架（含 agents/skills/rules/scripts 占位文件，adapter.yaml 的
+# provides 全部启用）
+bash $PL_HOME/scripts/adapter-create.sh my-stack --full
+
+# 强制覆盖已存在目录
+bash $PL_HOME/scripts/adapter-create.sh my-stack --full --force
+
+# 自定义输出位置
+bash $PL_HOME/scripts/adapter-create.sh my-stack --dest /tmp/sandbox
+```
+
+自检：脚手架生成后会**自动调用** `adapter-validate.sh` 做一次静态检查。
+合法骨架返回 0，你就可以开始填内容了。
+
+### A.2 参考现成样例
+
+当前独立仓内的 2 个 reference adapter 是最好的教材：
+
+| Adapter | 侧重 | 路径 |
+|---|---|---|
+| `adapter-nextjs-web` | React / Next.js App Router / RSC / TypeScript | `adapters/adapter-nextjs-web/` |
+| `adapter-python-fastapi` | FastAPI / Pydantic v2 / SQLAlchemy 2.x async | `adapters/adapter-python-fastapi/` |
+
+每个 adapter 内部都有：
+- 完整的 `adapter.yaml`（可直接复制作为起点）
+- 2 个 agent（architect + reviewer）
+- 4 个 skill
+- 3 条 rule
+- 3 个 script（build / verify / lint）
+- `docs/case-study.md`
+
+### A.3 端到端 demo
+
+两份 demo 位于 `examples/`：
+
+| Demo | Adapter | 文件数 | 可复现步骤 |
+|---|---|---|---|
+| `examples/demo-nextjs-todo` | `adapter-nextjs-web` | 34 | 见 demo `README.md` |
+| `examples/demo-fastapi-users` | `adapter-python-fastapi` | 49 | 见 demo `README.md` |
+
+这些 demo 是**真实**跑过 `/pl:proposal → /pl:archive` 五阶段的产物，
+`pl-status.sh` 能识别 `ARCHIVE` 阶段、全任务完成。
+
+**写新 adapter 时，建议在 `examples/demo-<id>-<name>/` 配套提供一个 demo**，
+这样审阅和回归都有基线。
+
+---
+
+## 附录 B：CI 集成建议
+
+本仓的 `.github/workflows/ci.yml` 已包含 **adapter matrix 校验** job：
+
+```yaml
+adapter-matrix:
+  strategy:
+    matrix:
+      adapter:
+        - adapter-nextjs-web
+        - adapter-python-fastapi
+        # ← 新 adapter 加到这里
+  steps:
+    - bash scripts/adapter-validate.sh adapters/${{ matrix.adapter }}
+    - bash scripts/adapter-install.sh --dry-run adapters/${{ matrix.adapter }} /tmp/ci-host
+```
+
+新 adapter 合入时**记得 append 自己到 matrix**，否则不会被 CI 覆盖。
+
+---
+
+## 附录 C：反馈链路
+
+写完 adapter 后的协作流程：
+
+1. **自检**：`adapter-validate.sh` 通过、`adapter-install.sh --dry-run` 预览合理
+2. **本地 demo**：在 `examples/demo-<id>-<case>/` 跑完整流水线
+3. **PR**：按 `.github/PULL_REQUEST_TEMPLATE.md` 自检清单
+4. **讨论**：复杂决策（如新增 manifest 字段）先开 [Discussion](https://github.com/walkertop/pl-pipeline-standalone/discussions)
+5. **合入**：维护者 review + squash merge
+6. **发版**：若 adapter 自身 semver 升级，附更新 CHANGELOG
+
+出问题？先搜 [FAQ](../../../FAQ.md)，搜不到就开 [Issue](https://github.com/walkertop/pl-pipeline-standalone/issues/new/choose)
+选 **📦 New Adapter Proposal** 或 **🐛 Bug Report** 模板。

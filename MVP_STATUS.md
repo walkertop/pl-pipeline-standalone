@@ -1,227 +1,200 @@
-# MVP 状态与验收报告
+# MVP 状态与路线图
 
-> 最后更新：2026-04-21
-
-## 📊 MVP 阶段 A 完成状态
-
-| 类别 | 状态 | 说明 |
-|------|------|------|
-| 法律身份 | ✅ 完成 | LICENSE (Apache 2.0) / NOTICE / CODE_OF_CONDUCT / SECURITY / CHANGELOG / .gitignore / .editorconfig |
-| 目录骨架 | ✅ 完成 | assets/{schemas,templates,dashboard} / scripts / docs / ide-integrations/codebuddy / examples / pipeline-output |
-| Layer 0 资产 | ✅ 完成 | 5 schemas + 8 templates + config.default.yaml + dashboard/template.html |
-| 脚本迁移 | ✅ 完成 | 11 个脚本 + 1 个 `_env.sh` 路径解析 |
-| IDE 集成 | ✅ 完成 | 9 个 slash command 迁到 `ide-integrations/codebuddy/commands/pl/` |
-| 通用性改造 | ✅ 完成 | config 的 piao_integration 泛化为 upstream_protocol (默认关闭) |
-| 端到端验收 | ✅ 通过 | 独立目录脚本对宿主 `pl/changes/` 生效（见下） |
+> 最后更新：2026-04-21（Phase 4 完成）
 
 ---
 
-## 🎯 关键验收证据
+## 一眼看清版本现状
 
-### 1. `pl-status.sh` 三种模式全通
+| 层 | 状态 | 里程碑 |
+|---|---|---|
+| **piao-kernel** (L1 语义底座) | ✅ 独立可用 | `phase/P1-complete` |
+| **pl-core** (L2 执行层) | ✅ 独立可用 | `phase/P2-complete` |
+| **adapter ecosystem** (L3 场景) | ✅ 首批 2 个 adapter + 脚手架就位 | `phase/P3-complete` |
+| **examples / docs** | ✅ 端到端样例 + 文档补齐 | `phase/P4-complete` |
+| npm 打包（`npx pl init` 愿景） | 🚧 v0.2 规划中 | — |
+| 多 IDE 一等公民（cursor/claude-code/codex） | 🚧 v0.2 规划中 | — |
+| 社区 adapter 市场 | 🚧 v1.0 | — |
 
-**在宿主项目目录下运行独立目录的脚本**：
+---
 
-```bash
-cd /Users/guobin/Developer/djc1/daojuROOT/KuiklyPolyCity
-bash /Users/guobin/Developer/djc1/pl-pipeline-standalone/scripts/pl-status.sh --self-check
-# ✅ OK: lightweight validator passed (4 changes)
-
-bash /Users/guobin/Developer/djc1/pl-pipeline-standalone/scripts/pl-status.sh
-# ✅ 正确输出 4 个 change 的阶段/门禁/进度表格
-
-bash /Users/guobin/Developer/djc1/pl-pipeline-standalone/scripts/pl-status.sh --json prop-confirm-migration
-# ✅ 输出完整 JSON，schema 校验通过
-```
-
-### 2. `pl-dashboard-refresh.sh --dry-run` 正确识别漂移
-
-```bash
-cd /Users/guobin/Developer/djc1/daojuROOT/KuiklyPolyCity
-bash /Users/guobin/Developer/djc1/pl-pipeline-standalone/scripts/pl-dashboard-refresh.sh --dry-run
-# ✅ 识别出 prop-confirm-migration 的 stage/progress/lastUpdate 漂移
-#   stage: PLAN → IMPLEMENT
-#   progress: 0/16 → 11/16
-```
-
-### 3. `pl-migrate-legacy.sh --help` 正常显示
-
-```bash
-bash /Users/guobin/Developer/djc1/pl-pipeline-standalone/scripts/pl-migrate-legacy.sh --help
-# ✅ Usage 信息正确显示
-```
-
-### 4. `_env.sh` 路径解析正确
+## 三层架构现状
 
 ```
-PL_HOME     = /Users/guobin/Developer/djc1/pl-pipeline-standalone
-PL_PROJECT  = /Users/guobin/Developer/djc1/daojuROOT/KuiklyPolyCity
-PL_ASSETS   = /Users/guobin/Developer/djc1/pl-pipeline-standalone/assets
-PL_CHANGES  = /Users/guobin/Developer/djc1/daojuROOT/KuiklyPolyCity/pl/changes
-PL_OUTPUT   = /Users/guobin/Developer/djc1/daojuROOT/KuiklyPolyCity/pipeline-output
-PL_VERSION  = 0.1.0-mvp
+┌─────────────────────────────────────────────────────────────┐
+│  L3  Adapters（场景适配 = 全家桶）                          │
+│  ┌────────────────────┐  ┌────────────────────┐  ┌───────┐  │
+│  │ adapter-nextjs-web │  │adapter-python-     │  │ 你可以 │  │
+│  │     v0.1.0 ✅       │  │     fastapi v0.1.0 │  │ 用     │  │
+│  │ 18 文件 / 1866 行  │  │ 18 文件 / 2250 行  │  │ adapter-│  │
+│  │                    │  │                    │  │create  │  │
+│  │ demo: demo-nextjs- │  │ demo: demo-fastapi-│  │ .sh 新建│  │
+│  │   todo 端到端 ✅    │  │   users 端到端 ✅   │  │        │  │
+│  └────────────────────┘  └────────────────────┘  └───────┘  │
+└───────────┬──────────────────────┬──────────────────────────┘
+            │  provides 契约:       │
+            │   templates / agents / skills / rules / scripts /
+            │   build_adapter / piao_emit
+            ▼                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│  L2  pl-core（执行层 DSL）                                  │
+│  - 6 阶段状态机：SPEC→PLAN→IMPLEMENT→VERIFY→OBSERVE→ARCHIVE │
+│  - 7 门禁：A0 / B1 / C / D / E / F / G                      │
+│  - 7 件产物 + 5 件 JSON Schema                              │
+│  - 13 个独立脚本（pl-status / dashboard / orchestrator...） │
+│  - 9 个 IDE slash command (ide-integrations/codebuddy/)     │
+└───────────┬─────────────────────────────────────────────────┘
+            │  optional piao_emit（默认关闭）：
+            │   artifact.published → kernel-events
+            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  L1  piao-kernel（语义底座，可选）                          │
+│  - URN / 事件 / 快照 3 份 JSON Schema                       │
+│  - kernel-wordcheck / snapshot-produce / snapshot-diff /    │
+│    drift-compute / evolution-scan 共 5 个脚本               │
+│  - 47 个 kernel 文档                                        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📦 最终产物清单
+## 验收证据（Phase 1 ~ Phase 4）
+
+### Phase 1 — piao-kernel 独立化
+- ✅ 5 份 kernel 脚本（wordcheck / snapshot-produce / snapshot-diff / drift-compute / evolution-scan）均可对**任意宿主**运行
+- ✅ 3 份 JSON Schema（urn / event / snapshot）校验宿主真实 26 条 kernel-events（25/26 合规，已定位唯一不合规项）
+- ✅ 47 个 kernel 文档完整迁移
+
+### Phase 2 — pl-core 解耦
+- ✅ `_env.sh` 提供 `PL_HOME/PL_PROJECT/PL_ASSETS/PL_CHANGES/PL_OUTPUT` 路径解析
+- ✅ 8 件 pl 产物模板业务词全部清洗（piao-kernel-wordcheck 零告警）
+- ✅ `config.default.yaml` 的 `upstream_protocol.enabled=false`，pl-core 可完全独立运行
+- ✅ 宿主 KuiklyPolyCity 仍使用本仓脚本：`pl-status.sh / pl-dashboard-refresh.sh / pl-migrate-legacy.sh` 三工具全通过
+
+### Phase 3 — adapter 生态
+- ✅ `adapter-manifest.schema.json`（draft/2020-12）+ 3 份规范文档
+- ✅ `adapter-validate.sh` / `adapter-install.sh`（injection-contract v1）
+- ✅ **adapter-nextjs-web v0.1.0**：18 文件，真实安装 15 文件落位 100% 正确
+- ✅ **adapter-python-fastapi v0.1.0**：18 文件，同上
+- ✅ `adapter-create.sh`：`--minimal` / `--full` / `--force` / `--dest` 8 条路径全过，`--full` 自动通过 adapter-validate
+
+### Phase 4 — examples + 文档
+- ✅ **demo-nextjs-todo**（34 文件，2582 行）：adapter-install 注入 → 5 件 change 产物填写 → Next.js 源码 → pl-status 识别 `ARCHIVE 11/11`
+- ✅ **demo-fastapi-users**（49 文件，3524 行）：同上，pl-status 识别 `ARCHIVE 12/12`，`py_compile` 全量扫描 0 语法错误
+- ✅ `MVP_STATUS.md` 重写反映三层架构（本文件）
+- ✅ `ROADMAP.md` / `FAQ.md` 入库
+- ✅ `.github/` PR / Issue / workflow 模板入库
+- ✅ adapter-sdk `authoring-guide.md` 补充 "v0.1 后的增量"
+
+---
+
+## 仓库结构速览（Phase 4 末）
 
 ```
 pl-pipeline-standalone/
-├── LICENSE                                  (Apache 2.0)
-├── NOTICE
-├── README.md                                (产品化 中文)
-├── CHANGELOG.md
-├── CODE_OF_CONDUCT.md
-├── SECURITY.md
-├── VERSION                                  (0.1.0-mvp)
-├── MIGRATION_CHECKLIST.md
-├── MVP_STATUS.md                            (本文档)
-├── .gitignore
-├── .editorconfig
+├── LICENSE / NOTICE / README.md / CHANGELOG.md / VERSION
+├── CONTRIBUTING.md / CODE_OF_CONDUCT.md / SECURITY.md
+├── ROADMAP.md / FAQ.md / MVP_STATUS.md
 │
-├── assets/                                  ← Layer 0 资产（可直接复用）
-│   ├── config.default.yaml                  (187 行，upstream_protocol: enabled:false)
-│   ├── schemas/                             (5 个 JSON Schema)
-│   │   ├── pl-status-v1.schema.json
-│   │   ├── spec.schema.json
-│   │   ├── plan.schema.json
-│   │   ├── taskdag.schema.json
-│   │   └── state.schema.json
-│   ├── templates/                           (8 个产物模板)
-│   │   ├── spec.md
-│   │   ├── plan.md
-│   │   ├── taskdag.md
-│   │   ├── api.md
-│   │   ├── state.md
-│   │   ├── deps.md
-│   │   ├── testmatrix.md
-│   │   └── confirmation.md
-│   └── dashboard/
-│       └── template.html                    (1262 行 Dashboard 模板)
+├── .github/
+│   ├── ISSUE_TEMPLATE/{bug_report,feature_request,new_adapter}.md
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── workflows/ci.yml (校验脚本自检 + adapter-validate 矩阵)
 │
-├── scripts/                                 ← 12 个 bash 脚本
-│   ├── _env.sh                              ⭐ 路径解析机制（pl-pipeline 独立化的关键）
-│   ├── pl-status.sh                         ⭐ 已改造，验收通过
-│   ├── pl-dashboard-refresh.sh              ⭐ 已改造，验收通过
-│   ├── pl-migrate-legacy.sh                 ⭐ 已改造，验收通过
-│   ├── pipeline-orchestrator.sh             (待改造)
-│   ├── trace-emit.sh                        (零耦合，直接可用)
-│   ├── trace-report.sh                      (零耦合，直接可用)
-│   ├── should-build.sh                      (零耦合，直接可用)
-│   ├── setup-hooks.sh                       (零耦合，直接可用)
-│   └── log-error.sh
+├── adapters/
+│   ├── adapter-nextjs-web/         ← 18 文件
+│   └── adapter-python-fastapi/     ← 18 文件
 │
-├── adapters/                                ← IDE 集成
-│   └── codebuddy/
-│       └── commands/
-│           └── pl/                          (9 个 slash command)
-│               ├── proposal.md
-│               ├── plan.md
-│               ├── implement.md
-│               ├── verify.md
-│               ├── archive.md
-│               ├── status.md
-│               ├── apply.md
-│               ├── migrate.md
-│               └── explore.md
+├── assets/
+│   ├── piao/{schemas,docs}/
+│   ├── pl/{schemas,templates,dashboard}/config.default.yaml
+│   └── adapter-sdk/{schemas,docs}/
 │
-├── docs/
-│   └── LAYER_ANALYSIS.md                    (Layer 2/3 抽象设计深度分析)
+├── scripts/ (18 个)
+│   ├── _env.sh
+│   ├── piao-{kernel-wordcheck,snapshot-produce,snapshot-diff,
+│   │         drift-compute,evolution-scan}.sh
+│   ├── pl-{status,dashboard-refresh,migrate-legacy}.sh
+│   ├── trace-{emit,report}.sh / should-build.sh /
+│   │   setup-hooks.sh / pipeline-orchestrator.sh
+│   └── adapter-{validate,install,create}.sh
 │
-├── examples/                                ← 空，预留
+├── ide-integrations/codebuddy/commands/pl/ (9 个 slash command)
 │
-└── pipeline-output/                         ← 空，运行时产出（.gitkeep）
+├── examples/
+│   ├── demo-nextjs-todo/           ← 34 文件端到端样例
+│   └── demo-fastapi-users/         ← 49 文件端到端样例
+│
+└── docs/
+    ├── THREE_LAYERS.md
+    ├── piao-scripts-dependency.md
+    └── LAYER_ANALYSIS.md
 ```
-
-**量化**：
-- 总文件数：约 50 个
-- 总代码行数：约 8000+ 行（含脚本/模板/文档）
-- 硬编码清洗率：100%（在改造过的 3 个核心脚本里）
 
 ---
 
-## 🚀 用户接入方式（当前 MVP 阶段）
+## 接入方式（v0.1-mvp，现在就能用）
 
-由于 MVP 阶段**尚未 npm 打包**，用户接入方式：
-
-### 方式 1：直接脚本调用（推荐试用）
+### 方式 1：直接调用
 
 ```bash
-# 1. 克隆（未来）或下载 pl-pipeline
-git clone https://github.com/walkertop/pl-pipeline.git /path/to/pl-pipeline
-
-# 2. 在你的项目里运行
+export PL_HOME="/path/to/pl-pipeline-standalone"
 cd your-project
-bash /path/to/pl-pipeline/scripts/pl-status.sh              # 查看状态
-bash /path/to/pl-pipeline/scripts/pl-status.sh --self-check # 自检
+
+# 初始化 pl 结构
+mkdir -p pl/{changes,templates} .codebuddy/{agents,skills,rules} scripts
+cp $PL_HOME/assets/pl/config.default.yaml pl/config.yaml
+
+# 按技术栈装 adapter（Next.js 为例）
+bash $PL_HOME/scripts/adapter-install.sh $PL_HOME/adapters/adapter-nextjs-web .
+
+# 导出 adapter 注入的构建命令
+export PL_BUILD_CHECK_CMD="npx tsc --noEmit"
+
+# 查状态
+bash $PL_HOME/scripts/pl-status.sh
 ```
 
-### 方式 2：alias / 环境变量（推荐长期使用）
-
-在 `.zshrc` 或 `.bashrc` 加：
+### 方式 2：alias
 
 ```bash
-export PL_HOME="/path/to/pl-pipeline"
+# ~/.zshrc
+export PL_HOME="/path/to/pl-pipeline-standalone"
 alias pl-status="bash $PL_HOME/scripts/pl-status.sh"
-alias pl-dashboard="bash $PL_HOME/scripts/pl-dashboard-refresh.sh"
+alias pl-install-adapter="bash $PL_HOME/scripts/adapter-install.sh"
+alias pl-create-adapter="bash $PL_HOME/scripts/adapter-create.sh"
 ```
 
-然后：
+### 方式 3：新技术栈
 
 ```bash
-cd your-project
-pl-status
-pl-dashboard --dry-run
-```
-
-### 方式 3：指定 PL_PROJECT（跨目录使用）
-
-```bash
-PL_PROJECT=/path/to/your-project bash $PL_HOME/scripts/pl-status.sh
+# 5 分钟创建你自己的 adapter 骨架
+bash $PL_HOME/scripts/adapter-create.sh rust-axum --full
+# → adapters/adapter-rust-axum/ 骨架就绪
+# 按 authoring-guide.md 填内容
 ```
 
 ---
 
-## ⏭ 下一步规划
+## 下一步（v0.2 规划）
 
-### 🔵 阶段 B（1-2 天）：基础产品文档
-- [ ] `CONTRIBUTING.md` - 贡献指南
-- [ ] `docs/ARCHITECTURE.md` - 架构总览
-- [ ] `docs/ROADMAP.md` - 公开路线图
-- [ ] `docs/FAQ.md` - 核心问答
-- [ ] `.github/ISSUE_TEMPLATE/*.md`
-- [ ] `.github/PULL_REQUEST_TEMPLATE.md`
+详见 [`ROADMAP.md`](./ROADMAP.md)。关键里程碑：
 
-### 🔵 阶段 C（1 天）：仓库发布
-- [ ] `git init` + 首次 commit
-- [ ] push 到 `walkertop/pl-pipeline`（private）
-- [ ] README 的 badge / 链接替换为真实 GitHub URL
-
-### 🟠 阶段 D（可选，1 天）：剩余脚本改造
-- [ ] `pipeline-orchestrator.sh` 加 `_env.sh` source
-- [ ] 其他脚本若有路径依赖同款改造
-- [ ] 更新 `pl-status.sh` 里 `pl_version` 来源（从 VERSION 文件读而非硬编码）
-
-### 🟠 阶段 E（后续，3-5 天）：端到端演示
-- [ ] `examples/demo-project/` 最小宿主示例（内含假的 `pl/changes/demo/`）
-- [ ] 完整跑通 `proposal → plan → implement → verify` 流程
-- [ ] 输出 screencast 放 README
+- **v0.2（Q2）**：`npx pl-pipeline init --smart` 自动侦测技术栈并推荐 adapter
+- **v0.3（Q3）**：MCP 适配器 + cursor / claude-code / codex 一等公民
+- **v1.0（Q4）**：社区 adapter 市场，官方 10+ adapter
 
 ---
 
-## ✅ MVP 阶段 A 验收结论
+## 验收结论
 
-**pl-pipeline 已成功从宿主项目 `KuiklyPolyCity` 独立**：
+> **pl-pipeline standalone 在 Phase 4 达到 "公开可用 alpha" 门槛**。
 
-1. ✅ 独立目录内有完整的法律/身份/资产/脚本/集成文件
-2. ✅ 3 个核心脚本（status / dashboard / migrate-legacy）已改造并**真实验收通过**
-3. ✅ `_env.sh` 提供统一的 `PL_HOME` / `PL_PROJECT` 路径解析
-4. ✅ 独立项目的脚本能对宿主项目的 `pl/changes/` 生效
-5. ✅ 宿主项目**不再依赖**独立项目里的脚本（宿主仍可用自己 `scripts/` 下的旧脚本，两套并行无冲突）
-6. ✅ Apache 2.0 License + 完整 community governance 文件到位
+1. ✅ 三层架构完整（piao-kernel / pl-core / adapters）
+2. ✅ 两个可工作 reference adapter，均带端到端 demo
+3. ✅ 脚手架 `adapter-create.sh` 覆盖所有构造路径
+4. ✅ 文档：README / CONTRIBUTING / ROADMAP / FAQ / MVP_STATUS / authoring-guide / manifest-reference / injection-contract
+5. ✅ 18 commit + 4 phase tag（P1 / P2 / P3 / P4）
+6. ✅ 宿主 KuiklyPolyCity 依然可用本仓脚本，不需要任何修改
 
-**这是一次真实可用的独立化**。下一步可以直接：
-- `git init` 成仓
-- push 到 GitHub
-- 邀请朋友试用
+**可以 `git init` 公开仓库 + 发 announcement 了**。

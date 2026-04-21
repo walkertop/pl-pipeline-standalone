@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # -----------------------------------------------------------------
+  # Job 1：脚本静态检查
+  # -----------------------------------------------------------------
+  scripts-lint:
+    name: Scripts lint (bash -n)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash -n every script
+        run: |
+          fail=0
+          for f in scripts/*.sh; do
+            if ! bash -n "$f"; then
+              echo "::error file=$f::syntax error"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Shellcheck (informational)
+        continue-on-error: true
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck -S warning scripts/*.sh || true
+
+  # -----------------------------------------------------------------
+  # Job 2：pl-core 自检
+  # -----------------------------------------------------------------
+  pl-core-selfcheck:
+    name: pl-core self-check
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pl-status --self-check (on this repo via env override)
+        run: |
+          # 本仓 examples 是宿主；每个 demo 都可被 pl-status 识别
+          for demo in examples/*/; do
+            echo "=== $demo ==="
+            PL_PROJECT="$PWD/$demo" bash scripts/pl-status.sh --self-check
+          done
+
+  # -----------------------------------------------------------------
+  # Job 3：adapter 矩阵校验
+  # -----------------------------------------------------------------
+  adapter-matrix:
+    name: adapter-validate (${{ matrix.adapter }})
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter:
+          - adapter-nextjs-web
+          - adapter-python-fastapi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate ${{ matrix.adapter }}
+        run: bash scripts/adapter-validate.sh adapters/${{ matrix.adapter }}
+
+      - name: Dry-run install into tmp host
+        run: |
+          mkdir -p /tmp/ci-host/pl
+          cp assets/pl/config.default.yaml /tmp/ci-host/pl/config.yaml
+          bash scripts/adapter-install.sh --dry-run \
+            adapters/${{ matrix.adapter }} /tmp/ci-host
+
+  # -----------------------------------------------------------------
+  # Job 4：adapter-create 自检（minimal + full 两条路径）
+  # -----------------------------------------------------------------
+  adapter-create-selfcheck:
+    name: adapter-create self-check
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Minimal scaffold validates
+        run: |
+          bash scripts/adapter-create.sh ci-demo-min --dest /tmp/ci-min
+          bash scripts/adapter-validate.sh /tmp/ci-min
+
+      - name: Full scaffold validates
+        run: |
+          bash scripts/adapter-create.sh ci-demo-full --dest /tmp/ci-full --full
+          bash scripts/adapter-validate.sh /tmp/ci-full
+
+      - name: Invalid id must fail
+        run: |
+          if bash scripts/adapter-create.sh "Bad_ID" --dest /tmp/ci-bad >/dev/null 2>&1; then
+            echo "::error::adapter-create should reject invalid id"
+            exit 1
+          fi
+
+  # -----------------------------------------------------------------
+  # Job 5：Python demo py_compile 自检
+  # -----------------------------------------------------------------
+  demo-fastapi-compile:
+    name: demo-fastapi-users py_compile
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile all Python files
+        run: |
+          python -c "
+          import py_compile, pathlib, sys
+          errors = []
+          for p in pathlib.Path('examples/demo-fastapi-users/app').rglob('*.py'):
+              try:
+                  py_compile.compile(str(p), doraise=True)
+              except py_compile.PyCompileError as e:
+                  errors.append(str(e))
+          if errors:
+              print('\n'.join(errors), file=sys.stderr)
+              sys.exit(1)
+          print('✅ all Python files compile')
+          "
