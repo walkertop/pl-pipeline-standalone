@@ -27,12 +27,12 @@ source "$SCRIPT_DIR/_env.sh"
 
 REPO_ROOT="$PL_PROJECT"                              # 向后兼容：REPO_ROOT 保留
 CHANGES_DIR="$PL_CHANGES"
-SCHEMA_FILE="$PL_ASSETS/schemas/pl-status-v1.schema.json"
+SCHEMA_FILE="$PL_ASSETS/pl/schemas/pl-status-v1.schema.json"
 # 配置优先级：宿主项目的 pl/config.yaml > pl-pipeline 默认 config
 if [[ -f "$PL_PROJECT/pl/config.yaml" ]]; then
   CONFIG_FILE="$PL_PROJECT/pl/config.yaml"
 else
-  CONFIG_FILE="$PL_ASSETS/config.default.yaml"
+  CONFIG_FILE="$PL_ASSETS/pl/config.default.yaml"
 fi
 
 # ─── 颜色（仅 TTY）─────────────────────────────────────────────────────────
