@@ -1,0 +1,101 @@
+apiVersion: pl.dev/v1
+kind: Adapter
+
+metadata:
+  id: nextjs-web
+  name: Next.js Web 项目全家桶
+  description: >
+    面向 Next.js (App Router + React Server Components + TypeScript) Web 项目的
+    pl-pipeline 适配器。提供场景化 spec/plan/taskdag 模板、RSC/路由/数据获取
+    skills、TS 严格模式 rules、以及 build/verify/lint 三件套脚本。
+  version: 0.1.0
+  compatible_pl: ">=0.1.0-mvp <1.0.0"
+  compatible_piao: ">=0.1.0"
+  license: Apache-2.0
+  homepage: https://github.com/walkertop/pl-pipeline-standalone
+  authors:
+    - name: walker
+      email: bin5211bin@gmail.com
+  detect:
+    - file_exists: "next.config.js"
+    - file_exists: "next.config.ts"
+    - file_exists: "next.config.mjs"
+    - package_json_has: "next"
+
+provides:
+  templates:
+    spec: "templates/spec.md"
+    plan: "templates/plan.md"
+    taskdag: "templates/taskdag.md"
+  agents:
+    - path: "agents/nextjs-architect.md"
+      id: nextjs-architect
+      ide_support: [codebuddy, cursor, claude-code]
+      description: "Next.js App Router 架构师：RSC/路由/缓存决策"
+    - path: "agents/nextjs-reviewer.md"
+      id: nextjs-reviewer
+      ide_support: [codebuddy, cursor, claude-code]
+      description: "Next.js 代码审查员：性能/安全/可访问性"
+  skills:
+    - id: react-server-components
+      path: "skills/react-server-components.md"
+      triggers: ["rsc", "server component", "use server", "use client"]
+      description: "React Server Components 使用指南"
+    - id: nextjs-app-router
+      path: "skills/nextjs-app-router.md"
+      triggers: ["app router", "layout.tsx", "route group", "parallel route"]
+      description: "App Router 路由/布局/并行路由模式"
+    - id: nextjs-data-fetching
+      path: "skills/nextjs-data-fetching.md"
+      triggers: ["fetch", "server action", "revalidate", "cache tag"]
+      description: "数据获取、缓存失效与 Server Actions"
+    - id: nextjs-performance
+      path: "skills/nextjs-performance.md"
+      triggers: ["perf", "web vitals", "lcp", "bundle size"]
+      description: "Web Vitals 优化与 Bundle 分析"
+  rules:
+    - id: typescript-strict
+      path: "rules/typescript-strict.md"
+      scope: always
+      description: "TypeScript 严格模式配置与类型规范"
+    - id: nextjs-conventions
+      path: "rules/nextjs-conventions.md"
+      scope: always
+      description: "Next.js 路由/文件命名/服务端客户端边界约定"
+    - id: react-hooks
+      path: "rules/react-hooks.md"
+      scope: on-demand
+      description: "React Hooks 使用规范（依赖数组、状态管理）"
+  scripts:
+    build: "scripts/build.sh"
+    verify: "scripts/verify.sh"
+    lint: "scripts/lint.sh"
+  build_adapter:
+    type: npm
+    commands:
+      compile_check:
+        cmd: "npx tsc --noEmit"
+        success_pattern: "^$"
+        failure_patterns:
+          - "error TS[0-9]+"
+        timeout_sec: 180
+      lint: "npx next lint"
+      test: "npm test -- --ci --passWithNoTests"
+      full_build:
+        cmd: "npm run build"
+        timeout_sec: 600
+
+requires:
+  tools:
+    - name: node
+      min_version: "18.17"
+      install_hint: "brew install node 或 nvm install 18.17"
+    - name: npm
+      min_version: "9"
+      install_hint: "随 node 一起安装"
+  files:
+    - package.json
+
+piao_emit:
+  on_stages: [VERIFY, ARCHIVE]
+  urn_namespace: "urn:piao:artifact:pl:nextjs-web"
