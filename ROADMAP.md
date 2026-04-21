@@ -24,20 +24,37 @@
 | CLI | `pl doctor` 检查 `requires.tools` 依赖是否齐全 | 📝 |
 | 脚本 | 所有 `bash scripts/*.sh` 保持存在并可用（作为 lower-level 接口） | ✅ |
 
-### v0.2 门禁增强（based on 2026-04-21 retro）
+### v0.2 本体增强（retro-v2 驱动）
 
-首次真实跑 demo 暴露了 7 个 bug，**0 个被现有门禁抓到**（详见
-[`docs/retros/2026-04-demo-first-run-retro.md`](./docs/retros/2026-04-demo-first-run-retro.md)）。
-v0.2 重点是把 pl-pipeline 从"文档契约层"升级到"可执行契约层"：
+首次真实跑 demo 暴露 7 个 bug，**0 个被现有门禁抓到**。
+v1 retro 误诊为"让 adapter 多声明字段"；v2 retro 纠正为"**pl/piao 本体缺通用抽象**"
+（详见 [`docs/retros/2026-04-demo-first-run-retro-v2.md`](./docs/retros/2026-04-demo-first-run-retro-v2.md)）。
 
-| 优先级 | 脚本 | 作用 | 抓的 bug 类型 |
-|---|---|---|---|
-| **P0** | `pl-verify.sh` | 统一驱动 adapter 的 `build_adapter.commands.{compile,lint,test}` | 普通编译 / lint / 单元测试类 |
-| **P0** | `pl-smoke.sh` + 扩展 `adapter.smoke` 字段 | 真启服务 + 打 probes | 运行时才暴露的依赖 / HMR 状态丢失 |
-| **P1** | `pl-doctor.sh` | 读 `requires.{tools,files}` + 坏 combo 数据库 | 缺文件 / 缺 peer / 已知坏依赖 |
-| **P1** | `pl-dep-lock.sh` + 扩展 `adapter.peer_versions` | 宿主 lockfile ↔ adapter 期望版本交叉验证 | 版本不兼容 |
-| **P2** | `pl-code-scan.sh` + 规则 frontmatter detect 块 | rule 从 AI 提示 → CI 可执行 linter | 知识型违规 |
-| **P3** | `piao-artifact-verify.sh` | demo 反向漂移校验 | 回归保护 |
+**判断标准**：如果一个能力要所有 adapter 各做一遍，它属于 pl/piao 本体。
+
+#### pl-core 本体（v0.2 必做）
+
+| 能力 | 现状问题 | 新抽象 |
+|---|---|---|
+| **E1 可执行契约层** | `gate.criteria` 是散文；`gate.eval` 和 check 结果无闭环；`config.default.yaml` 硬编码 `gradle/ApiSelfCheck` | 引入 `GateDefinition / CheckDefinition` 数据模型，`eval_rule: "all_checks.pass"` 可机器求值；`pl-runner.sh` 统一驱动 |
+| **E2 SMOKE 阶段** | VERIFY 只管静态检查，不真启动；OBSERVE 只管线上观察；中间有缺口 | 把 SMOKE 抬为一等阶段（或 VERIFY 强制子阶段），定义 `smoke.{boot,ready,probe,shutdown}` 事件；本 retro 已用 trace-emit.sh 跑通示范 |
+| **orchestrator 解耦** | `pipeline-orchestrator.sh` 硬编码 `agent:migration-*`（宿主名字）；`config.default.yaml` 硬编码宿主栈 | adapter 可注入 `stage_actor`；移除所有宿主特定字符串 |
+| **E3 rule-as-code**（v0.3 也可） | rule/skill 只是 AI prompt，不能 CI 跑 | rule frontmatter 声明 `engine + detect`，`pl-rule-scan.sh` 通用引擎消费 |
+
+#### piao-kernel 本体（v0.2 必做）
+
+| 能力 | 现状问题 | 新抽象 |
+|---|---|---|
+| **E4 契约-现实漂移** | 现在的 drift-compute 只比较 URN snapshot 前后差 | 新增 `piao-contract-drift-compute.sh`：比较 declared contract (adapter manifest + lockfile) vs actual (宿主实测) |
+
+#### adapter 适配（次要 / 纯消费侧）
+
+v0.2 的 adapter.yaml schema 会从 `pl.dev/v1` → `pl.dev/v1.1`，新增字段：
+- `build_adapter.smoke.{start_cmd,ready_url,probes}` — E2 消费
+- `requires.peer_versions` — E4 消费
+- `rules[].engine` / `rules[].spec` — E3 消费（如 v0.2 落地）
+
+**注意**：adapter 只是 pl 新抽象的**占位填充方**。能力增长的重心在 pl/piao 本体。
 
 **v0.2 不做的事**：
 - ❌ 不重写脚本为 TypeScript；CLI 是脚本的薄 wrapper

@@ -1,0 +1,10 @@
+{"ts":"2026-04-21T15:41:12Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"workflow.start","data":{"demo":"demo-nextjs-todo","adapter":"nextjs-web@0.1.0"}}
+{"ts":"2026-04-21T15:41:12Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"phase.start","data":{"phase_name":"VERIFY"}}
+{"ts":"2026-04-21T15:41:13Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"check.run","data":{"checker":"compile_check","cmd":"tsc --noEmit","status":"pass","duration_sec":1}}
+{"ts":"2026-04-21T15:41:13Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"gate.eval","data":{"gate":"D","result":"passed","note":"derived from check results automatically"}}
+{"ts":"2026-04-21T15:41:13Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"phase.end","data":{"phase_name":"VERIFY"}}
+{"ts":"2026-04-21T15:41:13Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"phase.start","data":{"phase_name":"SMOKE","mode":"build-static"}}
+{"ts":"2026-04-21T15:41:20Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"smoke.build","data":{"cmd":"next build","status":"pass","duration_sec":7,"first_load_js":"unknown"}}
+{"ts":"2026-04-21T15:41:20Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"gate.eval","data":{"gate":"E_smoke","result":"passed","checks":["next build completed"]}}
+{"ts":"2026-04-21T15:41:20Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"phase.end","data":{"phase_name":"SMOKE"}}
+{"ts":"2026-04-21T15:41:20Z","trace_id":"add-todo-list_20260421_234112","phase":"VERIFY","actor":"human:demo-retro","event":"workflow.end","data":{}}
