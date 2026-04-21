@@ -1,0 +1,187 @@
+# pl-pipeline Config
+# 项目自治研发流水线配置文件
+# 文档: docs/pl-pipeline/README.md
+
+version: pl@v1.0
+namespace: pl
+
+# ----------------------------------------------------------------------------
+# 1. 阶段定义
+# ----------------------------------------------------------------------------
+stages:
+  - id: SPEC
+    name: "规格定义"
+    description: "把需求/旧代码/PRD 转成结构化规格"
+    owner_agent: "spec-author"       # 可由宿主项目覆盖，如 "spec-normalizer" 等
+    next_gate: A0
+
+  - id: PLAN
+    name: "任务规划"
+    description: "规格→可执行任务图，含组件复用分析"
+    owner_agent: "planner"
+    next_gate: B1
+
+  - id: IMPLEMENT
+    name: "编码实现"
+    description: "按 TaskDAG 逐任务编码"
+    owner_agent: "coder"
+    next_gate: D   # 内部有 C 门禁（任务全完成）→ D 门禁（验证前检查）
+
+  - id: VERIFY
+    name: "验证"
+    description: "编译 + 静态检查 + 运行时自检"
+    owner_agent: "guardian"
+    next_gate: E
+
+  - id: OBSERVE
+    name: "观察"
+    description: "稳定运行观察、埋点验证、性能采集"
+    owner_agent: "guardian"
+    next_gate: G   # 内部 F 门禁（无 P0 异常）→ G 门禁（归档前）
+
+  - id: ARCHIVE
+    name: "归档"
+    description: "知识沉淀、组件推广、change 关闭"
+    owner_agent: "archiver"
+    next_gate: null
+
+# ----------------------------------------------------------------------------
+# 2. 门禁定义
+# ----------------------------------------------------------------------------
+gates:
+  A0:
+    from: SPEC
+    to: PLAN
+    criteria:
+      - "功能清单 (Feature List) 完整"
+      - "所有 BLOCKING 问题已解决"
+      - "接口依赖清单 (Data Dependencies) 明确"
+
+  B1:
+    from: PLAN
+    to: IMPLEMENT
+    criteria:
+      - "TaskDAG 生成且无环"
+      - "组件复用分析完成（reuse_rate 非空）"
+      - "工时预估合理（单任务 ≤ 4h）"
+
+  C:
+    from: IMPLEMENT
+    to: IMPLEMENT
+    type: internal
+    criteria:
+      - "所有任务 DONE（Task Progress 全绿）"
+
+  D:
+    from: IMPLEMENT
+    to: VERIFY
+    criteria:
+      - "lint PASS（scripts/lint.sh）"
+      - "compile PASS（./gradlew build）"
+      - "网络层自检 PASS（ApiSelfCheck Mock fallback）"
+      - "解析层自检 PASS（宽松解析降级）"
+
+  E:
+    from: VERIFY
+    to: OBSERVE
+    criteria:
+      - "运行时日志正常（无 ERROR 级日志）"
+      - "TraceContract 通过（埋点对齐旧版）"
+      - "UI 验收通过（截图对比差异率 ≤ 5%）"
+
+  F:
+    from: OBSERVE
+    to: OBSERVE
+    type: internal
+    criteria:
+      - "无 P0 异常（连续观察 N 天）"
+      - "性能达标（加载 < 1s / 滚动 60fps）"
+
+  G:
+    from: OBSERVE
+    to: ARCHIVE
+    criteria:
+      - "稳定运行 N 天（默认 3 天）"
+      - "组件目录已更新（ARCHITECTURE_SNAPSHOT.md）"
+      - "知识沉淀完成（Skills/Rules/error-log 更新）"
+
+# ----------------------------------------------------------------------------
+# 3. 产物契约
+# ----------------------------------------------------------------------------
+artifacts:
+  required:
+    - spec.md         # StructuredSpec: What & Why
+    - plan.md         # Plan: How (架构决策、风险、里程碑)
+    - taskdag.md      # 任务 DAG
+    - api.md          # API Contract
+    - testmatrix.md   # 测试矩阵
+    - deps.md         # 依赖分析
+    - .state.md       # 阶段真相源
+
+  optional:
+    - proposal.md     # openspec 兼容入口
+    - design.md       # 高层决策摘要
+    - specs/**/*.md   # capability-level spec
+
+  schemas:
+    state: pl/schemas/state.schema.json
+    spec: pl/schemas/spec.schema.json
+    taskdag: pl/schemas/taskdag.schema.json
+    plan: pl/schemas/plan.schema.json
+
+# ----------------------------------------------------------------------------
+# 4. 命令集
+# ----------------------------------------------------------------------------
+commands:
+  proposal:   "创建新 change（启动 SPEC 阶段）"
+  plan:       "规格→任务图（启动 PLAN 阶段）"
+  implement:  "按 TaskDAG 编码（启动 IMPLEMENT 阶段）"
+  apply:      "实施已批准变更（逐任务完成）"
+  verify:     "全链路验证（启动 VERIFY 阶段）"
+  archive:    "归档沉淀（启动 ARCHIVE 阶段）"
+  status:     "全局/单 change 状态查询"
+  migrate:    "全流程编排（proposal→archive 自动化）"
+  explore:    "探索模式（需求澄清/问题诊断）"
+
+# ----------------------------------------------------------------------------
+# 5. 脚本集
+# ----------------------------------------------------------------------------
+scripts:
+  orchestrator: scripts/pl-orchestrator.sh
+  state_generator: scripts/pl-state-generator.sh
+  dashboard_gen: scripts/pl-dashboard-gen.sh
+  trace_emit: scripts/pl-trace-emit.sh
+  trace_report: scripts/pl-trace-report.sh
+  migration_verify: scripts/pl-migration-verify.sh
+
+# ----------------------------------------------------------------------------
+# 6. 观测体系
+# ----------------------------------------------------------------------------
+observability:
+  trace_dir: pipeline-output/trace
+  dashboard: pipeline-output/dashboard/index.html
+  reports_dir: pipeline-output/reports
+
+# ----------------------------------------------------------------------------
+# 7. 可选上游协议对接（默认关闭）
+# ----------------------------------------------------------------------------
+# pl-pipeline 的产物和事件可选择性地遵循一个更底层的 "artifact 契约协议"（URN /
+# sha256 / 事件流），用于多 adapter 生态和跨 change 审计。
+#
+# 对单人/单项目场景 **无需启用**，保持默认 false 即可。
+# 如果你在多团队协作场景需要这类契约，可通过自定义 adapter 实现。
+upstream_protocol:
+  enabled: false
+  # 以下字段仅在 enabled: true 时生效，作为未来扩展留位
+  # urn_prefix: "urn:your-protocol:artifact:pl"
+  # event_file: "your-protocol-events/{YYYY-MM}.jsonl"
+  # emit_on_stages: [VERIFY, ARCHIVE]
+
+# ----------------------------------------------------------------------------
+# 8. 遗产兼容（可选）
+# ----------------------------------------------------------------------------
+# 如果你的项目之前使用 openspec 等其它流水线方案，pl 提供一次性迁移脚本。
+legacy:
+  openspec_dir: openspec-legacy/
+  auto_migrate_script: scripts/pl-migrate-legacy.sh
+  # 弃用时间由项目自行决定

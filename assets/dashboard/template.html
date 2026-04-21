@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSpec Pipeline Dashboard</title>
+<style>
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-card: #1c2129;
+  --bg-hover: #282e38;
+  --border: #30363d;
+  --border-light: #3d444d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --accent-blue: #58a6ff;
+  --accent-green: #3fb950;
+  --accent-yellow: #d29922;
+  --accent-red: #f85149;
+  --accent-purple: #bc8cff;
+  --accent-orange: #f0883e;
+  --accent-cyan: #39d2c0;
+  --status-done: #238636; --status-done-bg: rgba(35,134,54,0.15);
+  --status-active: #1f6feb; --status-active-bg: rgba(31,111,235,0.15);
+  --status-warn: #9e6a03; --status-warn-bg: rgba(158,106,3,0.15);
+  --status-pending: #30363d; --status-pending-bg: rgba(48,54,61,0.4);
+  --status-error: #da3633; --status-error-bg: rgba(218,54,51,0.15);
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+  --font-mono: 'JetBrains Mono','Fira Code','SF Mono',Consolas,monospace;
+  --font-sans: -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px;scroll-behavior:smooth}
+body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-primary);line-height:1.5;min-height:100vh;overflow-x:hidden}
+.app{max-width:1440px;margin:0 auto;padding:var(--space-lg)}
+
+/* GLOBAL HEADER */
+.global-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-lg);background:linear-gradient(135deg, rgba(88,166,255,0.08), rgba(188,140,255,0.08));border:1px solid var(--border);border-radius:var(--radius-xl);margin-bottom:var(--space-lg)}
+.global-header-left{display:flex;align-items:center;gap:var(--space-md)}
+.global-logo{width:48px;height:48px;border-radius:var(--radius-lg);background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));display:flex;align-items:center;justify-content:center;font-size:24px}
+.global-title{font-size:22px;font-weight:700;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.global-subtitle{font-size:12px;color:var(--text-muted);font-family:var(--font-mono)}
+.global-stats{display:flex;gap:var(--space-lg)}
+.global-stat{text-align:center}
+.global-stat-value{font-size:24px;font-weight:700;font-family:var(--font-mono)}
+.global-stat-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
+.global-stat-value.green{color:var(--accent-green)}
+.global-stat-value.yellow{color:var(--accent-yellow)}
+.global-stat-value.blue{color:var(--accent-blue)}
+.global-stat-value.purple{color:var(--accent-purple)}
+
+/* CHANGE CARDS GRID */
+.changes-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(440px, 1fr));gap:var(--space-lg);margin-bottom:var(--space-lg)}
+
+/* CHANGE CARD */
+.change-card{background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;transition:all var(--transition-normal);cursor:default}
+.change-card:hover{border-color:var(--accent-blue);box-shadow:0 0 0 1px rgba(88,166,255,0.1), var(--shadow-md)}
+.change-card.expanded{grid-column:1/-1}
+
+.card-top{display:flex;align-items:center;justify-content:space-between;padding:var(--space-lg);border-bottom:1px solid var(--border)}
+.card-top-left{display:flex;align-items:center;gap:var(--space-md)}
+.card-icon{width:40px;height:40px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:20px}
+.card-icon.order{background:linear-gradient(135deg, rgba(63,185,80,0.2), rgba(63,185,80,0.05))}
+.card-icon.prop{background:linear-gradient(135deg, rgba(88,166,255,0.2), rgba(88,166,255,0.05))}
+.card-icon.pipeline{background:linear-gradient(135deg, rgba(188,140,255,0.2), rgba(188,140,255,0.05))}
+.card-name{font-size:16px;font-weight:600}
+.card-page-id{font-size:11px;font-family:var(--font-mono);color:var(--text-muted)}
+.card-stage-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;font-family:var(--font-mono)}
+.card-stage-badge.observe{background:var(--status-warn-bg);color:var(--accent-yellow);border:1px solid rgba(210,153,34,0.3)}
+.card-stage-badge.implement{background:var(--status-active-bg);color:var(--accent-blue);border:1px solid rgba(31,111,235,0.3)}
+.card-stage-badge.spec{background:var(--status-pending-bg);color:var(--text-secondary);border:1px solid var(--border)}
+.card-stage-badge.verify{background:rgba(57,210,192,0.1);color:var(--accent-cyan);border:1px solid rgba(57,210,192,0.3)}
+.card-stage-badge.done{background:var(--status-done-bg);color:var(--accent-green);border:1px solid rgba(35,134,54,0.3)}
+
+/* PIPELINE MINI */
+.pipeline-mini{display:flex;align-items:center;gap:0;padding:var(--space-md) var(--space-lg);background:var(--bg-tertiary);overflow-x:auto}
+.pm-stage{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-sm);font-size:11px;font-weight:500;white-space:nowrap;transition:all var(--transition-fast)}
+.pm-stage.done{color:var(--accent-green)}
+.pm-stage.active{color:var(--accent-blue);background:var(--status-active-bg);font-weight:600}
+.pm-stage.warn{color:var(--accent-yellow);background:var(--status-warn-bg);font-weight:600}
+.pm-stage.pending{color:var(--text-muted)}
+.pm-stage.error{color:var(--accent-red)}
+.pm-stage.blocked{color:var(--accent-red);background:var(--status-error-bg)}
+.pm-connector{width:24px;height:1px;background:var(--border);flex-shrink:0}
+.pm-connector.done{background:var(--accent-green);opacity:0.5}
+
+/* CARD BODY */
+.card-body{padding:var(--space-lg)}
+
+/* PROGRESS BAR */
+.progress-section{margin-bottom:var(--space-md)}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-sm)}
+.progress-label{font-size:12px;color:var(--text-secondary)}
+.progress-value{font-size:13px;font-weight:600;font-family:var(--font-mono)}
+.progress-bar{height:8px;background:var(--bg-tertiary);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;border-radius:4px;transition:width 0.6s cubic-bezier(0.4,0,0.2,1)}
+.progress-fill.green{background:linear-gradient(90deg, #238636, #3fb950)}
+.progress-fill.blue{background:linear-gradient(90deg, #1f6feb, #58a6ff)}
+.progress-fill.yellow{background:linear-gradient(90deg, #9e6a03, #d29922)}
+
+/* SELF CHECK MINI */
+.selfcheck-row{display:flex;gap:var(--space-sm);flex-wrap:wrap;margin-bottom:var(--space-md)}
+.sc-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:11px;font-family:var(--font-mono);background:var(--bg-tertiary);border:1px solid var(--border)}
+.sc-chip.pass{border-color:rgba(63,185,80,0.3);color:var(--accent-green)}
+.sc-chip.skip{color:var(--text-muted)}
+.sc-chip.warn{border-color:rgba(210,153,34,0.3);color:var(--accent-yellow)}
+.sc-chip.fail{border-color:rgba(248,81,73,0.3);color:var(--accent-red)}
+
+/* INFO GRID */
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin-bottom:var(--space-md)}
+.info-item{display:flex;flex-direction:column;gap:2px;padding:var(--space-sm);background:var(--bg-tertiary);border-radius:var(--radius-sm)}
+.info-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
+.info-value{font-size:13px;font-weight:500;font-family:var(--font-mono)}
+
+/* COMMAND BAR */
+.command-bar{display:flex;gap:var(--space-sm);flex-wrap:wrap;padding-top:var(--space-md);border-top:1px solid var(--border)}
+.cmd-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-md);font-size:12px;font-weight:600;font-family:var(--font-mono);border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;transition:all var(--transition-fast);position:relative;overflow:hidden}
+.cmd-btn:hover{border-color:var(--accent-blue);color:var(--accent-blue);background:var(--status-active-bg);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.cmd-btn:active{transform:translateY(0)}
+.cmd-btn.primary{border-color:var(--accent-blue);color:var(--accent-blue);background:var(--status-active-bg)}
+.cmd-btn.primary:hover{background:rgba(31,111,235,0.25);box-shadow:0 0 12px rgba(88,166,255,0.2)}
+.cmd-btn.success{border-color:var(--accent-green);color:var(--accent-green);background:var(--status-done-bg)}
+.cmd-btn.success:hover{background:rgba(35,134,54,0.25)}
+.cmd-btn.warning{border-color:var(--accent-yellow);color:var(--accent-yellow);background:var(--status-warn-bg)}
+.cmd-btn.warning:hover{background:rgba(158,106,3,0.25)}
+.cmd-btn.disabled{opacity:0.4;cursor:not-allowed;pointer-events:none}
+.cmd-btn .cmd-icon{font-size:14px}
+
+/* TOAST */
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-120%);padding:12px 24px;background:var(--accent-green);color:#fff;border-radius:var(--radius-md);font-size:13px;font-weight:600;z-index:9999;transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);box-shadow:var(--shadow-lg);pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.info{background:var(--accent-blue)}
+.toast.success{background:var(--accent-green)}
+.toast.warn{background:var(--accent-yellow);color:#000}
+
+/* QUICK GUIDE */
+.quick-guide{position:fixed;bottom:20px;right:20px;background:var(--bg-secondary);border:1px solid var(--accent-blue);border-radius:var(--radius-lg);padding:var(--space-md) var(--space-lg);box-shadow:var(--shadow-lg);z-index:9998;opacity:0;transform:translateY(20px);transition:all 0.3s ease;pointer-events:none;max-width:400px}
+.quick-guide.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.qg-step{display:flex;align-items:center;gap:var(--space-sm);padding:4px 0;font-size:12px;color:var(--text-secondary)}
+.qg-step code{background:var(--bg-tertiary);padding:2px 6px;border-radius:var(--radius-sm);font-family:var(--font-mono);color:var(--accent-blue);font-size:11px}
+.qg-step kbd{display:inline-flex;align-items:center;padding:2px 6px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;color:var(--text-primary);box-shadow:0 1px 0 var(--border)}
+.qg-key{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:var(--accent-blue);color:#fff;border-radius:50%;font-size:10px;font-weight:700;flex-shrink:0}
+
+/* EXPAND BUTTON */
+.expand-btn{display:flex;align-items:center;justify-content:center;padding:6px;background:transparent;border:none;color:var(--text-muted);cursor:pointer;border-radius:var(--radius-sm);transition:all var(--transition-fast)}
+.expand-btn:hover{background:var(--bg-tertiary);color:var(--text-primary)}
+
+/* DETAIL PANEL (expanded) */
+.detail-panel{display:none;border-top:1px solid var(--border);padding:var(--space-lg);animation:fadeIn 0.2s ease}
+.change-card.expanded .detail-panel{display:block}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* TASK LIST */
+.task-group{margin-bottom:var(--space-md)}
+.task-group-title{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:var(--space-sm);display:flex;align-items:center;gap:var(--space-sm)}
+.task-group-badge{font-size:11px;font-family:var(--font-mono);color:var(--text-muted);background:var(--bg-tertiary);padding:2px 8px;border-radius:10px}
+.task-item{display:flex;align-items:flex-start;gap:var(--space-sm);padding:4px 0;font-size:12px;color:var(--text-secondary)}
+.task-item.done{color:var(--text-muted);text-decoration:line-through}
+.task-check{flex-shrink:0}
+.task-check.done{color:var(--accent-green)}
+.task-check.pending{color:var(--text-muted)}
+.task-annotation{font-size:11px;color:var(--accent-green);font-family:var(--font-mono);margin-left:4px}
+
+/* QUESTIONS */
+.questions-section{margin-top:var(--space-md);border-top:1px solid var(--border);padding-top:var(--space-md)}
+.q-item{display:flex;gap:var(--space-sm);padding:6px 0;font-size:12px}
+.q-id{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);background:var(--bg-tertiary);padding:2px 6px;border-radius:var(--radius-sm);flex-shrink:0}
+.q-text{color:var(--text-secondary)}
+.q-conclusion{color:var(--accent-green);font-size:11px;margin-top:2px}
+
+/* FOOTER */
+.footer{text-align:center;padding:var(--space-xl);color:var(--text-muted);font-size:12px;font-family:var(--font-mono)}
+
+/* COMMAND PALETTE (modal) */
+.cmd-palette-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:flex-start;justify-content:center;padding-top:15vh}
+.cmd-palette-overlay.show{display:flex}
+.cmd-palette{width:560px;max-height:60vh;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow-lg);overflow:hidden;animation:slideDown 0.2s ease}
+@keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+.cmd-palette-header{padding:var(--space-md) var(--space-lg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:var(--space-sm)}
+.cmd-palette-header input{flex:1;background:transparent;border:none;outline:none;font-size:16px;color:var(--text-primary);font-family:var(--font-mono)}
+.cmd-palette-header input::placeholder{color:var(--text-muted)}
+.cmd-palette-list{padding:var(--space-sm);max-height:calc(60vh - 60px);overflow-y:auto}
+.cmd-palette-item{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-md);border-radius:var(--radius-md);cursor:pointer;transition:all var(--transition-fast)}
+.cmd-palette-item:hover,.cmd-palette-item.selected{background:var(--bg-hover)}
+.cmd-palette-item-icon{font-size:18px;width:32px;text-align:center}
+.cmd-palette-item-text{flex:1}
+.cmd-palette-item-name{font-size:14px;font-weight:500}
+.cmd-palette-item-desc{font-size:11px;color:var(--text-muted)}
+.cmd-palette-item-kbd{font-size:11px;font-family:var(--font-mono);color:var(--text-muted);background:var(--bg-tertiary);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border)}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--border-light)}
+
+@media (max-width:900px){
+  .changes-grid{grid-template-columns:1fr}
+  .global-header{flex-direction:column;gap:var(--space-md)}
+  .global-stats{justify-content:center}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Dashboard...</div>
+</div>
+
+<div id="toast" class="toast"></div>
+<div id="quickGuide" class="quick-guide"></div>
+
+<!-- Command Palette (⌘K) -->
+<div class="cmd-palette-overlay" id="cmdPalette" onclick="if(event.target===this)Dashboard.closePalette()">
+  <div class="cmd-palette">
+    <div class="cmd-palette-header">
+      <span style="color:var(--text-muted);font-size:16px">⌘</span>
+      <input type="text" id="cmdPaletteInput" placeholder="输入命令或搜索..." oninput="Dashboard.filterPalette(this.value)" onkeydown="Dashboard.handlePaletteKey(event)"/>
+    </div>
+    <div class="cmd-palette-list" id="cmdPaletteList"></div>
+  </div>
+</div>
+
+<script>
+// =========================================================================
+//  ALL CHANGES DATA
+// =========================================================================
+const CHANGES = [
+  {
+      id: 'migrate-order-detail-page',
+      name: '订单详情页迁移',
+      pageId: 'order_detail',
+      icon: '📦',
+      iconClass: 'order',
+      stage: 'OBSERVE',
+      stageClass: 'observe',
+      complexity: '🟡 中',
+      domain: '交易域',
+      fileCount: 11,
+      reuseRate: '0/6 = 0%',
+      weexSource: '3114 行',
+      lastUpdate: '2026-04-10 23:36',
+      pipeline: [
+      {
+          name: 'SPEC',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'PLAN',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'IMPLEMENT',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'VERIFY',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'OBSERVE',
+          status: 'active',
+          icon: '💻',
+        },
+      {
+          name: 'ARCHIVE',
+          status: 'pending',
+          icon: '⬜',
+        },
+    ],
+      selfCheck: [
+      {
+          label: 'Lint',
+          status: 'pass',
+        },
+      {
+          label: 'Compile',
+          status: 'pass',
+        },
+      {
+          label: 'Network',
+          status: 'skip',
+        },
+      {
+          label: 'Parse',
+          status: 'skip',
+        },
+      {
+          label: 'Render',
+          status: 'skip',
+        },
+      {
+          label: 'Tracking',
+          status: 'pass',
+        },
+    ],
+      progress: {
+        done: 0,
+        total: 0,
+      },
+      alert: '运行时观测待设备环境（无 ADB 连接）。待办：3.3 测试验证 (0/6) → 3.4 灰度发布 (0/3)',
+      questions: [
+      {
+          id: 'Q-1',
+          text: 'OrderActionModule 缺少 deleteOrder 方法',
+          conclusion: '✅ 已实现',
+        },
+      {
+          id: 'Q-2',
+          text: '抽免单/宝箱/返现券集成尚未实现',
+          conclusion: '✅ 已集成',
+        },
+      {
+          id: 'Q-3',
+          text: '埋点功能尚未实现',
+          conclusion: '✅ 已实现',
+        },
+      {
+          id: 'Q-4',
+          text: '返现券领取操作未实现',
+          conclusion: '✅ 已实现',
+        },
+      {
+          id: 'Q-5',
+          text: '跳转逻辑是否需要修改 Kotlin 代码',
+          conclusion: '✅ 不需要',
+        },
+    ],
+      commands: [
+      {
+          label: 'Verify',
+          icon: '🔍',
+          cmd: '/openspec verify',
+          desc: '运行全链路验证',
+          class: 'primary',
+        },
+      {
+          label: 'Archive',
+          icon: '📦',
+          cmd: '/openspec archive',
+          desc: '归档变更',
+          class: '',
+        },
+      {
+          label: 'Status',
+          icon: '📊',
+          cmd: '/openspec status',
+          desc: '查看状态',
+          class: '',
+        },
+    ],
+      nextAction: '在有设备环境时运行测试验证，完成 3.3 + 3.4 后归档',
+      taskGroups: [
+      {
+          title: '阶段1: 数据层',
+          done: 15,
+          total: 15,
+          items: [
+          {
+              d: 1,
+              t: '准备工作 (3/3)',
+            },
+          {
+              d: 1,
+              t: 'OrderDetailModule (6/6)',
+            },
+          {
+              d: 1,
+              t: 'OrderActionModule (5/5)',
+            },
+          {
+              d: 1,
+              t: '页面骨架 (4/4)',
+            },
+        ],
+        },
+      {
+          title: '阶段2: UI组件',
+          done: 34,
+          total: 34,
+          items: [
+          {
+              d: 1,
+              t: 'OrderInfoCard (4/4)',
+            },
+          {
+              d: 1,
+              t: 'OrderHeaderComponent (3/3)',
+            },
+          {
+              d: 1,
+              t: 'OrderGoodsCard (4/4)',
+            },
+          {
+              d: 1,
+              t: 'OrderActionBar (5/5)',
+            },
+          {
+              d: 1,
+              t: '抽免单集成 (4/4)',
+            },
+          {
+              d: 1,
+              t: '宝箱抽奖 (2/2)',
+            },
+          {
+              d: 1,
+              t: '返现券集成 (2/2)',
+            },
+          {
+              d: 1,
+              t: '埋点 (3/3)',
+            },
+        ],
+        },
+      {
+          title: '阶段3: 发布',
+          done: 11,
+          total: 20,
+          items: [
+          {
+              d: 1,
+              t: '跳转逻辑更新 (8/8)',
+            },
+          {
+              d: 1,
+              t: 'UI 精细化 (3/3)',
+            },
+          {
+              d: 0,
+              t: '测试验证 (0/6) ⚠️ 需设备',
+            },
+          {
+              d: 0,
+              t: '灰度发布 (0/3)',
+            },
+        ],
+        },
+    ],
+    },
+  {
+      id: 'refactor-prop-detail-full-migration',
+      name: '商品详情页迁移',
+      pageId: 'prop_detail',
+      icon: '🛒',
+      iconClass: 'prop',
+      stage: 'IMPLEMENT',
+      stageClass: 'implement',
+      complexity: '🔴 高',
+      domain: '交易域',
+      fileCount: 83,
+      reuseRate: '8/34 = 23%',
+      weexSource: '大型页面',
+      lastUpdate: '2026-04-10 14:58',
+      pipeline: [
+      {
+          name: 'SPEC',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'PLAN',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'IMPLEMENT',
+          status: 'active',
+          icon: '💻',
+        },
+      {
+          name: 'VERIFY',
+          status: 'pending',
+          icon: '⬜',
+        },
+      {
+          name: 'OBSERVE',
+          status: 'pending',
+          icon: '⬜',
+        },
+      {
+          name: 'ARCHIVE',
+          status: 'pending',
+          icon: '⬜',
+        },
+    ],
+      selfCheck: [
+      {
+          label: 'Lint',
+          status: 'skip',
+        },
+      {
+          label: 'Compile',
+          status: 'skip',
+        },
+      {
+          label: 'Network',
+          status: 'skip',
+        },
+      {
+          label: 'Parse',
+          status: 'skip',
+        },
+      {
+          label: 'Render',
+          status: 'skip',
+        },
+      {
+          label: 'Tracking',
+          status: 'skip',
+        },
+    ],
+      progress: {
+        done: 0,
+        total: 0,
+      },
+      alert: null,
+      questions: [],
+      commands: [
+      {
+          label: 'Implement',
+          icon: '💻',
+          cmd: '/openspec implement',
+          desc: '继续编码实现',
+          class: 'primary',
+        },
+      {
+          label: 'Status',
+          icon: '📊',
+          cmd: '/openspec status',
+          desc: '查看状态',
+          class: '',
+        },
+      {
+          label: 'Verify',
+          icon: '🔍',
+          cmd: '/openspec verify',
+          desc: '运行验证',
+          class: 'disabled',
+        },
+    ],
+      nextAction: '继续实现剩余 Module（P0: ShoppingCart/GoodsCheck → P1 → P2），然后 UI 层',
+      taskGroups: [
+      {
+          title: '阶段1.1 准备工作',
+          done: 2,
+          total: 3,
+          items: [
+          {
+              d: 1,
+              t: 'DebugUI 工具类',
+            },
+          {
+              d: 1,
+              t: 'DEBUG_MODE 开关',
+            },
+          {
+              d: 0,
+              t: '接口文档和数据模型',
+            },
+        ],
+        },
+      {
+          title: '阶段1.2 P0 FlashSaleModule',
+          done: 8,
+          total: 10,
+          items: [
+          {
+              d: 1,
+              t: 'FlashSaleModule.kt (6项完成)',
+            },
+          {
+              d: 1,
+              t: 'FlashSaleTimerCard + LimitCard',
+            },
+          {
+              d: 0,
+              t: 'StrategyConfig 配置',
+            },
+          {
+              d: 0,
+              t: '测试秒杀模式',
+            },
+        ],
+        },
+      {
+          title: '阶段1.2 P0 ShoppingCartModule',
+          done: 0,
+          total: 6,
+          items: [
+          {
+              d: 0,
+              t: 'ShoppingCartModule.kt',
+            },
+          {
+              d: 0,
+              t: 'fetchCartNum / addToCart',
+            },
+          {
+              d: 0,
+              t: '更新 BottomActionCard',
+            },
+          {
+              d: 0,
+              t: '测试购物车',
+            },
+        ],
+        },
+      {
+          title: '阶段1.2 P0 GoodsCheckModule',
+          done: 0,
+          total: 6,
+          items: [
+          {
+              d: 0,
+              t: 'GoodsCheckModule.kt',
+            },
+          {
+              d: 0,
+              t: 'checkGoodsBuyPrecheck / checkGoodsOwned',
+            },
+          {
+              d: 0,
+              t: '集成购买流程',
+            },
+          {
+              d: 0,
+              t: '测试商品检查',
+            },
+        ],
+        },
+      {
+          title: '阶段1.3 P1 (5个Module)',
+          done: 0,
+          total: 35,
+          items: [
+          {
+              d: 0,
+              t: 'CouponModule (7项)',
+            },
+          {
+              d: 0,
+              t: 'CashbackModule (7项)',
+            },
+          {
+              d: 0,
+              t: 'YXZJCouponModule (14项)',
+            },
+          {
+              d: 0,
+              t: 'UserRoleModule (7项)',
+            },
+          {
+              d: 0,
+              t: 'AdvertisementModule (5项)',
+            },
+        ],
+        },
+      {
+          title: '阶段1.4 P2 CommentModule',
+          done: 0,
+          total: 8,
+          items: [
+          {
+              d: 0,
+              t: 'CommentModule.kt (8项)',
+            },
+        ],
+        },
+      {
+          title: '阶段2: UI层',
+          done: 0,
+          total: 28,
+          items: [
+          {
+              d: 0,
+              t: '通用组件库 (7项)',
+            },
+          {
+              d: 0,
+              t: 'P0 Card UI 替换 (5项)',
+            },
+          {
+              d: 0,
+              t: 'P1 Card UI 替换 (9项)',
+            },
+          {
+              d: 0,
+              t: 'P2 Card UI 替换 (3项)',
+            },
+          {
+              d: 0,
+              t: 'UI 优化 (4项)',
+            },
+        ],
+        },
+      {
+          title: '阶段3: 测试与发布',
+          done: 0,
+          total: 16,
+          items: [
+          {
+              d: 0,
+              t: '功能测试',
+            },
+          {
+              d: 0,
+              t: '兼容性测试',
+            },
+          {
+              d: 0,
+              t: '性能测试',
+            },
+          {
+              d: 0,
+              t: '灰度发布',
+            },
+        ],
+        },
+    ],
+    },
+  {
+      id: 'migration-agent-pipeline',
+      name: 'Agent 流水线架构',
+      pageId: null,
+      icon: '🏗️',
+      iconClass: 'pipeline',
+      stage: 'ARCHIVE',
+      stageClass: 'archive',
+      complexity: '🔴 高',
+      domain: '基础设施',
+      fileCount: 2,
+      reuseRate: 'N/A',
+      weexSource: 'N/A',
+      lastUpdate: '2026-04-21 10:35',
+      pipeline: [
+      {
+          name: 'SPEC',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'PLAN',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'IMPLEMENT',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'VERIFY',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'OBSERVE',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'ARCHIVE',
+          status: 'active',
+          icon: '💻',
+        },
+    ],
+      selfCheck: [],
+      progress: {
+        done: 5,
+        total: 5,
+      },
+      alert: '仅有 proposal，无 TaskDAG，无 .state.md',
+      questions: [],
+      commands: [
+      {
+          label: 'Plan',
+          icon: '🗂',
+          cmd: '/openspec plan',
+          desc: '生成 TaskDAG',
+          class: 'primary',
+        },
+      {
+          label: 'Migrate',
+          icon: '🚀',
+          cmd: '/openspec migrate',
+          desc: '全流程编排',
+          class: '',
+        },
+      {
+          label: 'Status',
+          icon: '📊',
+          cmd: '/openspec status',
+          desc: '查看状态',
+          class: '',
+        },
+    ],
+      nextAction: '从 proposal 生成 TaskDAG 进入规划阶段',
+      taskGroups: [],
+    },
+  {
+      id: 'prop-confirm-migration',
+      name: '确认订单页 Weex → Kuikly 迁移',
+      pageId: null,
+      icon: '📋',
+      iconClass: '',
+      stage: 'PLAN',
+      stageClass: 'plan',
+      complexity: '🔴高',
+      domain: '交易',
+      fileCount: 0,
+      reuseRate: '',
+      weexSource: '',
+      lastUpdate: '2026-04-20 16:35',
+      pipeline: [
+      {
+          name: 'SPEC',
+          status: 'done',
+          icon: '✅',
+        },
+      {
+          name: 'PLAN',
+          status: 'active',
+          icon: '💻',
+        },
+      {
+          name: 'IMPLEMENT',
+          status: 'pending',
+          icon: '⬜',
+        },
+      {
+          name: 'VERIFY',
+          status: 'pending',
+          icon: '⬜',
+        },
+      {
+          name: 'OBSERVE',
+          status: 'pending',
+          icon: '⬜',
+        },
+      {
+          name: 'ARCHIVE',
+          status: 'pending',
+          icon: '⬜',
+        },
+    ],
+      selfCheck: [],
+      progress: {
+        done: 0,
+        total: 16,
+      },
+      alert: null,
+      questions: [],
+      commands: [
+      {
+          label: 'Status',
+          icon: '📊',
+          cmd: '/pl:status',
+          desc: '查看状态',
+          class: 'primary',
+        },
+    ],
+      nextAction: '（pl-pipeline 自动生成骨架；请按实际补齐 taskGroups/questions 等富内容）',
+      taskGroups: [],
+    },
+];
+
+// All available commands
+const ALL_COMMANDS = [
+  { icon: '📊', name: '/openspec status', desc: '查看所有变更的流水线状态', cmd: '/openspec status' },
+  { icon: '📝', name: '/openspec proposal', desc: '创建新变更提案', cmd: '/openspec proposal' },
+  { icon: '🚀', name: '/openspec migrate', desc: '全流程编排（需求→验证→归档）', cmd: '/openspec migrate' },
+  { icon: '🗂', name: '/openspec plan', desc: '从 Spec 生成 TaskDAG', cmd: '/openspec plan' },
+  { icon: '💻', name: '/openspec implement', desc: '按 TaskDAG 逐任务编码', cmd: '/openspec implement' },
+  { icon: '🔍', name: '/openspec verify', desc: '运行全链路验证', cmd: '/openspec verify' },
+  { icon: '📦', name: '/openspec archive', desc: '归档已部署变更', cmd: '/openspec archive' },
+];
+
+// =========================================================================
+//  DASHBOARD RENDERER
+// =========================================================================
+const Dashboard = {
+  expandedCard: null,
+  paletteIndex: 0,
+  filteredCmds: ALL_COMMANDS,
+
+  init() {
+    this.render();
+    // ⌘K shortcut
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        this.togglePalette();
+      }
+      if (e.key === 'Escape') this.closePalette();
+    });
+  },
+
+  esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+
+  render() {
+    const totalDone = CHANGES.reduce((s,c) => s + c.progress.done, 0);
+    const totalAll = CHANGES.reduce((s,c) => s + c.progress.total, 0);
+    const activeCount = CHANGES.filter(c => c.stage !== 'ARCHIVE').length;
+    
+    document.getElementById('app').innerHTML = `
+      ${this.renderGlobalHeader(totalDone, totalAll, activeCount)}
+      <div class="changes-grid">
+        ${CHANGES.map(c => this.renderChangeCard(c)).join('')}
+      </div>
+      ${this.renderFooter()}
+    `;
+  },
+
+  renderGlobalHeader(totalDone, totalAll, activeCount) {
+    const pct = totalAll > 0 ? Math.round(totalDone / totalAll * 100) : 0;
+    return `<div class="global-header">
+      <div class="global-header-left">
+        <div class="global-logo">🎯</div>
+        <div>
+          <div class="global-title">OpenSpec Pipeline Dashboard</div>
+          <div class="global-subtitle">⌘K 命令面板 · 点击按钮复制命令 → ⌘V 粘贴到聊天框执行</div>
+        </div>
+      </div>
+      <div class="global-stats">
+        <div class="global-stat">
+          <div class="global-stat-value blue">${activeCount}</div>
+          <div class="global-stat-label">活跃变更</div>
+        </div>
+        <div class="global-stat">
+          <div class="global-stat-value green">${totalDone}</div>
+          <div class="global-stat-label">已完成任务</div>
+        </div>
+        <div class="global-stat">
+          <div class="global-stat-value yellow">${totalAll - totalDone}</div>
+          <div class="global-stat-label">待完成</div>
+        </div>
+        <div class="global-stat">
+          <div class="global-stat-value purple">${pct}%</div>
+          <div class="global-stat-label">总进度</div>
+        </div>
+      </div>
+    </div>`;
+  },
+
+  renderChangeCard(c) {
+    const expanded = this.expandedCard === c.id;
+    const pct = c.progress.total > 0 ? Math.round(c.progress.done / c.progress.total * 100) : 0;
+    const barColor = pct >= 80 ? 'green' : pct >= 30 ? 'blue' : 'yellow';
+    
+    // Pipeline mini
+    const pipelineHtml = c.pipeline.map((p, i) => {
+      const isActive = p.status === 'active' || p.status === 'warn';
+      const cls = p.status;
+      let html = `<div class="pm-stage ${cls}">${p.icon} ${p.name}</div>`;
+      if (i < c.pipeline.length - 1) {
+        const connCls = p.status === 'done' ? ' done' : '';
+        html += `<div class="pm-connector${connCls}"></div>`;
+      }
+      return html;
+    }).join('');
+
+    // Self-check chips
+    const scHtml = c.selfCheck.map(s => 
+      `<span class="sc-chip ${s.status}">${s.status === 'pass' ? '✅' : s.status === 'skip' ? '⏭️' : s.status === 'warn' ? '⚠️' : '❌'} ${this.esc(s.label)}</span>`
+    ).join('');
+
+    // Command buttons
+    const cmdsHtml = c.commands.map(cmd => 
+      `<button class="cmd-btn ${cmd.class}" onclick="Dashboard.runCommand('${this.esc(cmd.cmd)}', event)" title="${this.esc(cmd.desc)}">
+        <span class="cmd-icon">${cmd.icon}</span> ${this.esc(cmd.label)}
+      </button>`
+    ).join('');
+
+    // Detail panel (task groups)
+    let detailHtml = '';
+    if (c.taskGroups.length > 0) {
+      const groupsHtml = c.taskGroups.map(g => {
+        const gpct = g.total > 0 ? Math.round(g.done / g.total * 100) : 0;
+        const itemsHtml = g.items.map(t => 
+          `<div class="task-item${t.d ? ' done' : ''}">
+            <span class="task-check ${t.d ? 'done' : 'pending'}">${t.d ? '☑' : '☐'}</span>
+            <span>${this.esc(t.t)}</span>
+          </div>`
+        ).join('');
+        return `<div class="task-group">
+          <div class="task-group-title">${this.esc(g.title)} <span class="task-group-badge">${g.done}/${g.total} · ${gpct}%</span></div>
+          ${itemsHtml}
+        </div>`;
+      }).join('');
+
+      const questionsHtml = c.questions.length > 0 ? `
+        <div class="questions-section">
+          <div class="task-group-title">❓ Open Questions <span class="task-group-badge">${c.questions.filter(q=>q.conclusion).length}/${c.questions.length} CLOSED</span></div>
+          ${c.questions.map(q => `<div class="q-item">
+            <span class="q-id">${this.esc(q.id)}</span>
+            <div>
+              <div class="q-text">${this.esc(q.text)}</div>
+              ${q.conclusion ? `<div class="q-conclusion">${this.esc(q.conclusion)}</div>` : ''}
+            </div>
+          </div>`).join('')}
+        </div>` : '';
+
+      detailHtml = `<div class="detail-panel">${groupsHtml}${questionsHtml}</div>`;
+    }
+
+    return `<div class="change-card${expanded ? ' expanded' : ''}" id="card-${c.id}">
+      <div class="card-top">
+        <div class="card-top-left">
+          <div class="card-icon ${c.iconClass}">${c.icon}</div>
+          <div>
+            <div class="card-name">${this.esc(c.name)}</div>
+            <div class="card-page-id">${c.pageId ? '@Page("' + c.pageId + '")' : '基础设施'} · ${this.esc(c.domain)} · ${c.complexity}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--space-sm)">
+          <span class="card-stage-badge ${c.stageClass}">${c.pipeline.find(p=>p.status==='active'||p.status==='warn')?.icon || '📝'} ${c.stage}</span>
+          ${c.taskGroups.length > 0 ? `<button class="expand-btn" onclick="Dashboard.toggleExpand('${c.id}')" title="${expanded ? '收起' : '展开详情'}">${expanded ? '▲' : '▼'}</button>` : ''}
+        </div>
+      </div>
+
+      <div class="pipeline-mini">${pipelineHtml}</div>
+
+      <div class="card-body">
+        ${c.progress.total > 0 ? `<div class="progress-section">
+          <div class="progress-header">
+            <span class="progress-label">任务进度</span>
+            <span class="progress-value" style="color:var(--accent-${barColor})">${c.progress.done}/${c.progress.total} · ${pct}%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill ${barColor}" style="width:${pct}%"></div></div>
+        </div>` : '<div class="progress-section"><span class="progress-label" style="color:var(--text-muted)">尚无任务定义</span></div>'}
+
+        ${scHtml ? `<div class="selfcheck-row">${scHtml}</div>` : ''}
+
+        <div class="info-grid">
+          <div class="info-item"><span class="info-label">产物文件</span><span class="info-value">${c.fileCount}</span></div>
+          <div class="info-item"><span class="info-label">复用率</span><span class="info-value">${c.reuseRate}</span></div>
+          <div class="info-item"><span class="info-label">最后更新</span><span class="info-value">${c.lastUpdate.slice(5)}</span></div>
+          <div class="info-item"><span class="info-label">Weex 源</span><span class="info-value">${c.weexSource}</span></div>
+        </div>
+
+        ${c.alert ? `<div style="padding:8px 12px;background:var(--status-warn-bg);border:1px solid rgba(210,153,34,0.2);border-radius:var(--radius-sm);font-size:11px;color:var(--accent-yellow);margin-bottom:var(--space-md)">⚠️ ${this.esc(c.alert)}</div>` : ''}
+
+        ${c.nextAction ? `<div style="padding:8px 12px;background:var(--status-active-bg);border:1px solid rgba(88,166,255,0.15);border-radius:var(--radius-sm);font-size:11px;color:var(--accent-blue);margin-bottom:var(--space-md)">💡 <strong>下一步:</strong> ${this.esc(c.nextAction)}</div>` : ''}
+
+        <div class="command-bar">${cmdsHtml}</div>
+      </div>
+
+      ${detailHtml}
+    </div>`;
+  },
+
+  renderFooter() {
+    return `<div class="footer">
+      <div style="margin-bottom:8px">
+        <button class="cmd-btn" onclick="Dashboard.runCommand('/openspec status', event)" style="font-size:13px;padding:10px 20px">
+          📊 刷新状态
+        </button>
+        <button class="cmd-btn" onclick="Dashboard.runCommand('/openspec proposal', event)" style="font-size:13px;padding:10px 20px">
+          📝 新建提案
+        </button>
+        <button class="cmd-btn" onclick="Dashboard.togglePalette()" style="font-size:13px;padding:10px 20px">
+          ⌘K 命令面板
+        </button>
+      </div>
+      <div>OpenSpec Pipeline Dashboard · Generated ${new Date().toLocaleString('zh-CN')}</div>
+    </div>`;
+  },
+
+  // == INTERACTIONS ==
+  toggleExpand(id) {
+    this.expandedCard = this.expandedCard === id ? null : id;
+    this.render();
+  },
+
+  /**
+   * 多策略触发 IDE 聊天命令：
+   * 
+   * 策略1: VSCode/CodeBuddy 命令面板 API (workbench.action.chat.open)
+   *   - 在 IDE 内置 Simple Browser 中运行时，可通过 parent 访问 VSCode API
+   *   - 需要 acquireVsCodeApi() 或 postMessage 通道
+   * 
+   * 策略2: vscode:// / codebuddy:// URI Scheme
+   *   - 通过 URI 协议打开 IDE 命令面板
+   *   - 格式: vscode://command/workbench.action.chat.open?%7B%22query%22%3A%22xxx%22%7D
+   *
+   * 策略3: 剪贴板 + 键盘快捷键提示（最稳定的兜底方案）
+   */
+  runCommand(cmd, event) {
+    if (event) event.stopPropagation();
+    
+    // 策略1: 尝试通过 VSCode webview postMessage API
+    if (this._tryVSCodeWebviewAPI(cmd)) return;
+    
+    // 策略2: 尝试 URI scheme（在外部浏览器中打开时有效）
+    if (this._tryURIScheme(cmd)) return;
+    
+    // 策略3: 剪贴板 + 智能提示
+    this._copyToClipboard(cmd);
+  },
+
+  _tryVSCodeWebviewAPI(cmd) {
+    try {
+      // 在 VSCode Simple Browser webview 中，尝试通过 postMessage 通信
+      // VSCode webview API: 通过 acquireVsCodeApi 获取
+      if (typeof acquireVsCodeApi === 'function') {
+        const vscode = acquireVsCodeApi();
+        vscode.postMessage({ type: 'openChat', command: cmd });
+        this.showToast(`🚀 已发送 "${cmd}" 到 IDE 聊天`, 'success');
+        return true;
+      }
+      // 尝试通过 parent window postMessage (Simple Browser 场景)
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ 
+          type: 'codebuddy:runCommand', 
+          command: cmd 
+        }, '*');
+        // 这里不能确定是否真的生效，所以继续走兜底
+        return false;
+      }
+    } catch(e) { /* 非 webview 环境，忽略 */ }
+    return false;
+  },
+
+  _tryURIScheme(cmd) {
+    // CodeBuddy IDE 基于 VSCode，尝试 codebuddy:// 或 vscode:// URI scheme
+    // 注意：在 IDE 内置浏览器中 URI scheme 通常不会触发自身，仅在外部浏览器有效
+    try {
+      if (window === window.parent) {
+        // 外部浏览器环境，尝试 URI scheme
+        // 格式参考 VSCode: vscode://command/{commandId}?{encodedArgs}
+        const isExternalBrowser = !document.querySelector('meta[name="vscode-webview"]');
+        if (isExternalBrowser && navigator.userAgent.indexOf('Electron') === -1) {
+          // 仅在确认是外部浏览器时尝试
+          return false; // 暂不自动跳转，避免打断用户
+        }
+      }
+    } catch(e) {}
+    return false;
+  },
+
+  _copyToClipboard(cmd) {
+    const copyAndNotify = () => {
+      this.showToast(`📋 已复制 "${cmd}" → 切到 CodeBuddy 聊天框 ⌘V 粘贴执行`, 'info');
+      this._showQuickGuide(cmd);
+    };
+
+    navigator.clipboard.writeText(cmd).then(copyAndNotify).catch(() => {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = cmd;
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      copyAndNotify();
+    });
+  },
+
+  _showQuickGuide(cmd) {
+    // 在按钮旁显示快速操作指引（3秒后消失）
+    const guide = document.getElementById('quickGuide');
+    if (guide) {
+      guide.innerHTML = `
+        <div class="qg-step"><span class="qg-key">1</span> 已复制 <code>${this.esc(cmd)}</code></div>
+        <div class="qg-step"><span class="qg-key">2</span> 按 <kbd>⌘ + Shift + L</kbd> 或点击侧边栏打开聊天</div>
+        <div class="qg-step"><span class="qg-key">3</span> 按 <kbd>⌘V</kbd> 粘贴并回车执行</div>
+      `;
+      guide.classList.add('show');
+      clearTimeout(this._guideTimer);
+      this._guideTimer = setTimeout(() => guide.classList.remove('show'), 5000);
+    }
+  },
+
+  showToast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast ' + type;
+    el.classList.add('show');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  },
+
+  // == COMMAND PALETTE ==
+  togglePalette() {
+    const el = document.getElementById('cmdPalette');
+    if (el.classList.contains('show')) {
+      this.closePalette();
+    } else {
+      this.filteredCmds = ALL_COMMANDS;
+      this.paletteIndex = 0;
+      this.renderPaletteList();
+      el.classList.add('show');
+      setTimeout(() => document.getElementById('cmdPaletteInput').focus(), 100);
+    }
+  },
+
+  closePalette() {
+    document.getElementById('cmdPalette').classList.remove('show');
+    document.getElementById('cmdPaletteInput').value = '';
+  },
+
+  filterPalette(q) {
+    const lower = q.toLowerCase();
+    this.filteredCmds = ALL_COMMANDS.filter(c => 
+      c.name.toLowerCase().includes(lower) || c.desc.toLowerCase().includes(lower)
+    );
+    this.paletteIndex = 0;
+    this.renderPaletteList();
+  },
+
+  handlePaletteKey(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.paletteIndex = Math.min(this.paletteIndex + 1, this.filteredCmds.length - 1);
+      this.renderPaletteList();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.paletteIndex = Math.max(this.paletteIndex - 1, 0);
+      this.renderPaletteList();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (this.filteredCmds[this.paletteIndex]) {
+        this.runCommand(this.filteredCmds[this.paletteIndex].cmd);
+        this.closePalette();
+      }
+    }
+  },
+
+  renderPaletteList() {
+    document.getElementById('cmdPaletteList').innerHTML = this.filteredCmds.map((c, i) => 
+      `<div class="cmd-palette-item${i === this.paletteIndex ? ' selected' : ''}" onclick="Dashboard.runCommand('${c.cmd}');Dashboard.closePalette()">
+        <span class="cmd-palette-item-icon">${c.icon}</span>
+        <div class="cmd-palette-item-text">
+          <div class="cmd-palette-item-name">${c.name}</div>
+          <div class="cmd-palette-item-desc">${c.desc}</div>
+        </div>
+        <span class="cmd-palette-item-kbd">⏎</span>
+      </div>`
+    ).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted)">无匹配命令</div>';
+  },
+};
+
+// Boot
+document.addEventListener('DOMContentLoaded', () => Dashboard.init());
+</script>
+</body>
+</html>

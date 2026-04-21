@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kuiklypolycity/pl/schemas/spec.schema.json",
+  "title": "PL Structured Spec",
+  "description": "spec.md 的结构化字段约束（可由 normalizer 产出，也用于门控校验）",
+  "type": "object",
+  "required": ["change_id", "features", "acceptance"],
+  "properties": {
+    "change_id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "change_type": {
+      "type": "string",
+      "enum": ["page_migration", "feature_add", "refactor", "performance", "bugfix"]
+    },
+    "page_id": { "type": "string" },
+    "business_domain": { "type": "string" },
+    "complexity": { "type": "string", "enum": ["high", "medium", "low"] },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "priority", "acceptance_criteria"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^F[0-9]+$" },
+          "name": { "type": "string" },
+          "priority": { "type": "string", "enum": ["P0", "P1", "P2"] },
+          "source": { "type": "string" },
+          "acceptance_criteria": { "type": "string" }
+        }
+      }
+    },
+    "data_dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url_key", "purpose"],
+        "properties": {
+          "url_key": { "type": "string" },
+          "purpose": { "type": "string" },
+          "status": { "type": "string", "enum": ["existing", "needs_confirmation", "not_exists"] }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "blocking"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^Q[0-9]+$" },
+          "description": { "type": "string" },
+          "blocking": { "type": "string", "enum": ["BLOCKING", "NON_BLOCKING"] },
+          "status": { "type": "string", "enum": ["open", "confirmed", "deferred"] }
+        }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "properties": {
+        "functional": { "type": "array", "items": { "type": "string" } },
+        "ui": { "type": "array", "items": { "type": "string" } },
+        "data": { "type": "array", "items": { "type": "string" } },
+        "performance": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

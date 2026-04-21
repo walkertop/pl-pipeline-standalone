@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kuiklypolycity/pl/schemas/plan.schema.json",
+  "title": "PL Plan",
+  "description": "plan.md 的结构化字段约束（PLAN 阶段产出的实施计划）",
+  "type": "object",
+  "required": ["change_id", "approach", "risks"],
+  "properties": {
+    "change_id": { "type": "string" },
+    "version": { "type": "string", "description": "如 v1 / v2（当 Spec 或 API Contract 重大变更时版本递增）" },
+    "approach": {
+      "type": "object",
+      "required": ["summary"],
+      "properties": {
+        "summary": { "type": "string", "description": "实施思路概述" },
+        "strategy": { "type": "string", "enum": ["rewrite", "incremental_migration", "adapter", "mixed"] },
+        "rollout": { "type": "string", "description": "发布策略（灰度/全量等）" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "in_scope": { "type": "array", "items": { "type": "string" } },
+        "out_of_scope": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "severity"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^R[0-9]+$" },
+          "description": { "type": "string" },
+          "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+          "mitigation": { "type": "string" },
+          "owner": { "type": "string" }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "外部依赖（其它变更、第三方组件、后端接口、设计稿等）",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "enum": ["change", "component", "api", "design", "other"] },
+          "ref": { "type": "string" },
+          "status": { "type": "string", "enum": ["ready", "pending", "blocked"] }
+        }
+      }
+    },
+    "milestones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "target_date"],
+        "properties": {
+          "name": { "type": "string" },
+          "target_date": { "type": "string", "format": "date" },
+          "gate": { "type": "string", "description": "对应的门控名（如 SPEC_GATE/PLAN_GATE/IMPLEMENT_GATE）" }
+        }
+      }
+    }
+  }
+}

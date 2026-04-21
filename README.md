@@ -1,0 +1,255 @@
+# pl-pipeline
+
+> **让 AI 编码不再是 "vibe coding"，而是可审计、可恢复、可验证的工程过程。**
+
+<p align="center">
+  <img alt="stage" src="https://img.shields.io/badge/stage-alpha-orange">
+  <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
+  <img alt="node" src="https://img.shields.io/badge/node-%3E%3D18-green">
+  <a href="https://pl-pipeline.dev"><img alt="docs" src="https://img.shields.io/badge/docs-pl--pipeline.dev-black"></a>
+</p>
+
+---
+
+## 这是什么？
+
+**pl-pipeline** 是一个 **AI-First 研发操作系统**。
+
+它不替你写代码，但它规定了 AI 和人一起写代码时的：
+
+- **做什么顺序**（六阶段状态机 `SPEC → PLAN → IMPLEMENT → VERIFY → OBSERVE → ARCHIVE`）
+- **走到哪算过关**（七道可机械校验的门禁 `A0 / B1 / C / D / E / F / G`）
+- **产物长什么样**（7 件核心产物 + 3 件可选产物 + 5 份 JSON Schema 校验）
+- **出错怎么回溯**（`.state.md` 真相源 + `CORRECTIONS.md` 纠正机制）
+- **做完怎么沉淀**（ARCHIVE 阶段自动反哺 Rules/Skills，形成飞轮）
+
+一句话：**Spec 定义"做什么" + Rules 约束"怎么做" + Skills 负责"做得快且稳" + pl-pipeline 保证"做得住且可交接"**。
+
+---
+
+## 为什么需要它？
+
+当你让 AI 帮你写真实项目时，你会发现：
+
+| 痛点 | 传统做法 | pl-pipeline |
+|---|---|---|
+| 需求模糊，AI 开始瞎猜 | 反复澄清 / 推倒重写 | `pl proposal` 结构化 Spec，A0 门禁强制澄清 |
+| 任务太大，AI 丢上下文 | 分多次对话，记录分散 | `pl plan` 生成 TaskDAG，`.state.md` 记录进度 |
+| AI 乱改文件或漏改 | 肉眼 diff review | TaskDAG 范围 + 黑名单 grep 自动验收 |
+| 换个 AI/人接手，上下文全丢 | 重新讲一遍 | 读 `.state.md` + `spec.md` + `taskdag.md` 无缝续跑 |
+| 写到一半发现需求错了 | 边改边乱 | `CORRECTIONS.md` 正式记录偏离 + 证据链 |
+| 经验无法复用 | 散落文档 | ARCHIVE 阶段沉淀到 Rules/Skills，下次项目直接继承 |
+
+**这不是"又一个 AI 编码工具"。这是给所有 AI 编码工具的"操作系统"**：
+你用什么 AI IDE 都行（Claude Code / Cursor / Codex / CodeBuddy / 任何 MCP 兼容的工具），
+pl-pipeline 负责让它们输出的代码**可审计、可恢复、可验证**。
+
+---
+
+## 30 秒上手
+
+> ⚠️ **当前 MVP 状态（2026-04-21）**：pl-pipeline 目前是 **bash 脚本形态**（v0.1.0-mvp），
+> 下面的 `npx pl-pipeline init` / `pl <cmd>` 命令是 **v0.2 规划愿景**，尚未实现。
+> 当前可用的**真实**接入方式见 [`MVP_STATUS.md`](./MVP_STATUS.md)。
+>
+> **现在就能用**：
+> ```bash
+> # 在你的项目目录下直接调用
+> export PL_HOME="/path/to/pl-pipeline"
+> cd your-project
+> bash $PL_HOME/scripts/pl-status.sh          # 查看状态
+> bash $PL_HOME/scripts/pl-status.sh --self-check
+> ```
+
+**v0.2 规划愿景**（未来体验）：
+
+```bash
+# 1. 一条命令接入现有项目（自动扫描技术栈并推荐配置）
+npx pl-pipeline init --smart
+
+# 2. 开始第一个变更
+pl proposal add-user-login
+
+# 3. 让 AI 基于 spec.md 自动规划
+pl plan add-user-login
+
+# 4. 逐任务实施（AI 按 TaskDAG 编码）
+pl implement add-user-login
+
+# 5. 跑验证
+pl verify add-user-login
+
+# 6. 归档 + 沉淀经验
+pl archive add-user-login
+
+# 随时查看进度
+pl status
+```
+
+---
+
+## 核心特性
+
+### 🎯 六阶段流水线
+
+```
+SPEC ──A0──▶ PLAN ──B1──▶ IMPLEMENT ──C/D──▶ VERIFY ──E──▶ OBSERVE ──F/G──▶ ARCHIVE
+ 定义什么      拆解方案      按图施工          质量把关      稳定运行         沉淀知识
+```
+
+每一步都有**明确产物** + **可机械校验的门禁**，不是靠感觉通过。
+
+### 📄 契约化产物
+
+每个变更 `pl/changes/<id>/` 下自动产出：
+
+| 产物 | 阶段 | 说明 |
+|---|---|---|
+| `spec.md` | SPEC | What & Why |
+| `plan.md` | PLAN | How（架构 / 风险 / 里程碑） |
+| `taskdag.md` | PLAN | 任务依赖图 |
+| `api.md` | PLAN | 接口契约 |
+| `testmatrix.md` | PLAN/IMPL | 测试矩阵 |
+| `deps.md` | SPEC/PLAN | 依赖分析 |
+| `.state.md` | 全阶段 | **阶段真相源**（唯一 Source of Truth） |
+
+### 🧠 Smart Init（零配置接入）
+
+```bash
+npx pl-pipeline init --smart
+
+🔍 Scanning your project...
+  ✓ Detected language: Kotlin (Multiplatform)
+  ✓ Detected build tool: Gradle
+  ✓ Detected test framework: JUnit
+
+📦 Recommended preset: @pl/preset-kotlin-kmm
+  Will install:
+    • rules/kotlin-coding-standards.md
+    • skills/kotlin-serialization.md
+    • adapters/gradle.yaml
+
+? Apply recommended preset? (Y/n)
+```
+
+支持的 Preset 技术栈（持续增加）：
+- `kotlin-kmm` / `web-react-nextjs` / `python-fastapi` / `rust-cargo` / `go-modules` / ...
+- 以及**社区贡献**的迁移专用包，如 `weex-to-kuikly` / `vue2-to-vue3`
+
+### 🔌 多 IDE 适配（MCP First）
+
+```bash
+pl init --ide mcp          # 推荐：通过 MCP 协议适配所有兼容 IDE
+pl init --ide cursor       # 生成 .cursor/rules/
+pl init --ide claude-code  # 生成 .claude/commands/
+pl init --ide codebuddy    # 生成 .codebuddy/commands/
+pl init --ide codex        # 生成 AGENTS.md 片段
+```
+
+### 🏗️ 构建/测试适配层
+
+pl-pipeline **不绑定任何构建工具**，通过 Adapter 协议适配：
+
+```yaml
+# pl/adapters/build.yaml
+adapter: gradle           # 或 npm / cargo / go / make / custom
+commands:
+  compile:
+    cmd: "./gradlew :shared:compileDebugKotlinAndroid"
+    success_pattern: "BUILD SUCCESSFUL"
+```
+
+### 📊 可观测 & 可恢复
+
+- **Trace JSONL**：每一步都结构化记录到 `pipeline-output/trace/<change>.events.jsonl`
+- **HTML 报告**：`pl report` 一键生成可视化报告
+- **Dashboard**：Web 面板实时查看所有变更状态
+- **断点续跑**：读 `.state.md` 就能从中断处继续，哪怕换了 AI、换了人
+
+---
+
+## 与其他工具的区别
+
+| 工具 | 定位 | pl-pipeline 的差异 |
+|---|---|---|
+| **Cursor / Claude Code / Codex** | AI IDE（代码生成） | pl-pipeline 管流程，不管 IDE —— 它们是你的执行器 |
+| **spec-kit / OpenSpec** | Spec 管理 | pl-pipeline 有完整的 6 阶段 + 7 门禁 + 可观测 + 可恢复 |
+| **Plandex / Aider** | AI 代码助手 | pl-pipeline 聚焦"流程工程"，不是"编程助手" |
+| **Jira / Linear** | 项目管理 | pl-pipeline 是**代码层**的可审计流程，产物就是代码仓的一部分 |
+
+**最贴切的类比**：
+- 如果 Cursor 是"发动机"，pl-pipeline 就是"变速箱 + ABS + 行车记录仪"。
+- 发动机帮你走得快，pl-pipeline 让你走得稳、可追溯、可交接。
+
+---
+
+## 谁应该用它？
+
+- ✅ **你在用 AI 写生产级代码**（不是 demo / 玩具项目）
+- ✅ **你的项目需要多人协作或 AI/人协作**（交接成本高）
+- ✅ **你的项目涉及大规模重构 / 迁移 / 新特性开发**
+- ✅ **你厌倦了"AI 上一轮做了什么我完全想不起来"**
+
+暂时不需要 pl-pipeline 的场景：
+- ❌ 一次性脚本 / 50 行以下的小工具
+- ❌ 探索性 notebook / 研究型代码
+
+---
+
+## 快速链接
+
+- 📖 [文档站](https://pl-pipeline.dev)
+- 🎮 [在线 Playground](https://pl-pipeline.dev/playground)
+- 🖼 [案例 Gallery](https://pl-pipeline.dev/gallery)
+- 💬 [Discord 社区](https://discord.gg/pl-pipeline)
+- 🐦 [Twitter / X](https://twitter.com/pl_pipeline)
+- 📋 [Roadmap](https://github.com/your-org/pl-pipeline/projects)
+
+---
+
+## 现状
+
+**pl-pipeline 目前处于 alpha 阶段**。
+
+- ✅ 核心引擎已验证：在 Kotlin Multiplatform 大型迁移项目中完成 11/16 任务（4831 行代码、0 回归、全程可追溯）
+- ✅ 6 阶段 + 7 门禁 + 7 产物契约稳定
+- 🚧 多 IDE Adapter 正在开发
+- 🚧 Preset Library 开放社区贡献
+- 🚧 文档站和 Playground 建设中
+
+---
+
+## 贡献
+
+我们欢迎以下贡献（按门槛从低到高）：
+
+1. **分享案例**：你的 Spec/Plan/TaskDAG 写得漂亮？提交到 Gallery
+2. **贡献 Preset**：把你的技术栈经验打包（`@pl/preset-your-stack`）
+3. **改进模板**：`templates/*.md` 可以更好？PR 欢迎
+4. **写 Adapter**：为新 IDE / 构建工具 / 可观测后端贡献适配器
+5. **核心引擎**：需要先读 [ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+
+详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
+---
+
+## License
+
+[Apache License 2.0](./LICENSE)
+
+---
+
+## 致谢
+
+pl-pipeline 的设计灵感来自：
+- [OpenSpec](https://github.com/scottschroder/openspec) —— Spec-driven 开发的早期探索
+- [spec-kit](https://github.com/github/spec-kit) —— GitHub 官方的 Spec 工具箱
+- [OpenTelemetry](https://opentelemetry.io/) —— 可观测协议设计范式
+- [Conventional Commits](https://www.conventionalcommits.org/) —— 可机械解析的约定化契约
+- 以及腾讯 `KuiklyPolyCity` 项目在实战中沉淀的工程经验
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ by developers tired of losing context.</sub>
+</p>

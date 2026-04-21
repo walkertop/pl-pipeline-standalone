@@ -1,0 +1,34 @@
+pl-pipeline
+Copyright 2026 binguo
+
+This product includes software developed by binguo and contributors
+(https://github.com/walkertop/pl-pipeline).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+------------------------------------------------------------------------
+
+This project is inspired by design patterns from:
+
+  - OpenSpec (https://github.com/jbellis/openspec)
+  - spec-kit (GitHub's specification-driven development tooling)
+
+The pipeline concepts (stages, gates, state machine) and contract-first
+approach draw intellectual lineage from these predecessors while
+introducing:
+
+  - Machine-verifiable gates (compile + lint + blacklist)
+  - .state.md as single source of truth for pipeline state
+  - CORRECTIONS mechanism for auditable mid-implementation pivots
+  - IDE-agnostic integration via MCP + adapters
+
+Internal lineage note:
+  pl-pipeline's contract-centric thinking (artifact identity, event
+  journal, drift detection) was influenced by an internal protocol
+  specification called "piao-pipeline" which is not released as part
+  of this distribution. The consumer of pl-pipeline does not need to
+  know about or depend on piao-pipeline.

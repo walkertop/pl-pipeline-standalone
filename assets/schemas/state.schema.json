@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kuiklypolycity/pl/schemas/state.schema.json",
+  "title": "PL Pipeline State",
+  "description": "每个变更目录下 .state.md 的 YAML front-matter schema（真相源）",
+  "type": "object",
+  "required": ["change_id", "stage", "updated_at"],
+  "properties": {
+    "change_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "变更 ID，kebab-case"
+    },
+    "page_id": {
+      "type": "string",
+      "description": "关联的页面 ID（如适用）"
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["SPEC", "PLAN", "IMPLEMENT", "VERIFY", "OBSERVE", "ARCHIVE", "DONE"],
+      "description": "当前阶段；DONE 表示已归档"
+    },
+    "stage_status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "blocked", "gated", "done"],
+      "description": "当前阶段状态"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "gates": {
+      "type": "object",
+      "description": "各阶段门控清单，key=阶段名，value=门控结果",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "passed": { "type": "boolean" },
+          "failed_checks": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "array", "items": { "type": "string" }, "description": "证据文件路径或 URN" }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "变更目录下的产物清单，key=逻辑名(spec/plan/taskdag/api/testmatrix/deps)，value=文件 URN",
+      "additionalProperties": { "type": "string" }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "blocking", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "blocking": { "type": "string", "enum": ["BLOCKING", "NON_BLOCKING"] },
+          "status": { "type": "string", "enum": ["open", "confirmed", "deferred", "closed"] },
+          "owner": { "type": "string" }
+        }
+      }
+    },
+    "history": {
+      "type": "array",
+      "description": "阶段转换历史",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "at"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "at": { "type": "string", "format": "date-time" },
+          "actor": { "type": "string", "description": "触发者 agent 名或 human" },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

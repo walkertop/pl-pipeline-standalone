@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kuiklypolycity/pl/schemas/pl-status-v1.schema.json",
+  "title": "pl-status --json output (v1)",
+  "description": "scripts/pl-status.sh --json 的稳定输出契约。dashboard / pre-commit / 外部 CI 都基于此 schema 消费。",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "pl_version", "changes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "pl-status-v1",
+      "description": "契约版本号。一旦发版就不可变；若字段破坏性调整，必须升版到 pl-status-v2"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 / RFC 3339；由脚本产出那一刻写入"
+    },
+    "pl_version": {
+      "type": "string",
+      "pattern": "^pl@v[0-9]+\\.[0-9]+(\\.[0-9]+)?$",
+      "description": "对应 pl/config.yaml 的 version 字段，用于消费方兼容性判断"
+    },
+    "changes": {
+      "type": "array",
+      "description": "当前工作区所有 pl/changes/ 下的 change 条目；按 id 字典序排序，保证 diff 稳定",
+      "items": { "$ref": "#/definitions/ChangeEntry" }
+    }
+  },
+  "definitions": {
+    "ChangeEntry": {
+      "type": "object",
+      "required": ["id", "stage", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "change 目录名（kebab-case）"
+        },
+        "name": {
+          "type": "string",
+          "description": "人读标题，取自 .state.md 的 change_name 字段；缺失时等于 id"
+        },
+        "stage": {
+          "type": "string",
+          "enum": ["SPEC", "PLAN", "IMPLEMENT", "VERIFY", "OBSERVE", "ARCHIVE", "DONE", "UNKNOWN"],
+          "description": "当前阶段；解析失败降级为 UNKNOWN（不中断）"
+        },
+        "gate_status": {
+          "type": ["string", "null"],
+          "enum": ["PENDING", "PASSED", "FAILED", "BLOCKED", null],
+          "description": "当前阶段门禁结果；未声明为 null"
+        },
+        "next_gate": {
+          "type": ["string", "null"],
+          "description": "下一个门禁 id（如 A0 / B1 / D / E / G），末阶段为 null"
+        },
+        "complexity": {
+          "type": ["string", "null"],
+          "description": "原样保留（如 '🔴高' / '🟡中' / '🟢低'），不做归一化"
+        },
+        "business_domain": {
+          "type": ["string", "null"],
+          "description": "业务域文本，如 '交易' / '社区'"
+        },
+        "tasks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "done":  { "type": "integer", "minimum": 0 },
+            "blocked": { "type": "integer", "minimum": 0 }
+          },
+          "description": "从 Task Progress 表统计；全部字段不可为负"
+        },
+        "open_questions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "total":    { "type": "integer", "minimum": 0 },
+            "blocking": { "type": "integer", "minimum": 0 },
+            "open":     { "type": "integer", "minimum": 0 }
+          }
+        },
+        "last_update": {
+          "type": ["string", "null"],
+          "description": "从 .state.md 注释/History 推断；解析失败为 null"
+        },
+        "source": {
+          "type": "object",
+          "required": ["state_path", "parse_ok"],
+          "additionalProperties": false,
+          "properties": {
+            "state_path": { "type": "string", "description": "相对仓库根的 .state.md 路径" },
+            "parse_ok":   { "type": "boolean", "description": "是否成功解析核心字段（stage 是否命中 enum）" },
+            "warnings":   { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    }
+  }
+}
