@@ -24,7 +24,22 @@
 | CLI | `pl doctor` 检查 `requires.tools` 依赖是否齐全 | 📝 |
 | 脚本 | 所有 `bash scripts/*.sh` 保持存在并可用（作为 lower-level 接口） | ✅ |
 
-**不做的事**：
+### v0.2 门禁增强（based on 2026-04-21 retro）
+
+首次真实跑 demo 暴露了 7 个 bug，**0 个被现有门禁抓到**（详见
+[`docs/retros/2026-04-demo-first-run-retro.md`](./docs/retros/2026-04-demo-first-run-retro.md)）。
+v0.2 重点是把 pl-pipeline 从"文档契约层"升级到"可执行契约层"：
+
+| 优先级 | 脚本 | 作用 | 抓的 bug 类型 |
+|---|---|---|---|
+| **P0** | `pl-verify.sh` | 统一驱动 adapter 的 `build_adapter.commands.{compile,lint,test}` | 普通编译 / lint / 单元测试类 |
+| **P0** | `pl-smoke.sh` + 扩展 `adapter.smoke` 字段 | 真启服务 + 打 probes | 运行时才暴露的依赖 / HMR 状态丢失 |
+| **P1** | `pl-doctor.sh` | 读 `requires.{tools,files}` + 坏 combo 数据库 | 缺文件 / 缺 peer / 已知坏依赖 |
+| **P1** | `pl-dep-lock.sh` + 扩展 `adapter.peer_versions` | 宿主 lockfile ↔ adapter 期望版本交叉验证 | 版本不兼容 |
+| **P2** | `pl-code-scan.sh` + 规则 frontmatter detect 块 | rule 从 AI 提示 → CI 可执行 linter | 知识型违规 |
+| **P3** | `piao-artifact-verify.sh` | demo 反向漂移校验 | 回归保护 |
+
+**v0.2 不做的事**：
 - ❌ 不重写脚本为 TypeScript；CLI 是脚本的薄 wrapper
 - ❌ 不引入后端服务 / telemetry（v0.x 完全离线）
 
