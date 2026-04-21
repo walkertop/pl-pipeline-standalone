@@ -26,8 +26,12 @@ log_warn()    { echo -e "${YELLOW}⚠️${NC} $*"; }
 log_error()   { echo -e "${RED}❌${NC} $*"; }
 
 # ---- 配置 -------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=./_env.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_env.sh"
+
+# PROJECT_ROOT 语义 = 用户宿主项目（$PL_PROJECT），在其 .git/hooks 中安装 hooks
+# 允许 PROJECT_ROOT 环境变量覆盖（向后兼容宿主内调用场景）
+PROJECT_ROOT="${PROJECT_ROOT:-$PL_PROJECT}"
 HOOKS_DIR="$PROJECT_ROOT/.git/hooks"
 
 cd "$PROJECT_ROOT"
@@ -82,23 +86,33 @@ NC='\033[0m'
 echo -e "${BLUE}━━━ Pre-commit 检查 ━━━${NC}"
 echo ""
 
-# 检查 staged 的 Kotlin 文件
-STAGED_KT=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.kt$' || true)
+# 检查 staged 的代码文件（语言由 adapter 决定；MVP 固定支持 Kotlin/TS/Python，
+# 非上述语言的项目此段会优雅跳过）
+STAGED_CODE=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(kt|kts|ts|tsx|js|jsx|py)$' || true)
 
-if [[ -n "$STAGED_KT" ]]; then
-  echo -e "${BOLD}🔍 Kotlin 代码检查...${NC}"
+if [[ -n "$STAGED_CODE" ]]; then
+  echo -e "${BOLD}🔍 代码检查...${NC}"
 
-  # 运行自定义规则检查（快速）
+  # 调用 adapter 注入的 lint 脚本；不存在则优雅跳过
+  LINT_SCRIPT=""
   if [[ -x "$SCRIPT_DIR/lint.sh" ]]; then
-    if ! "$SCRIPT_DIR/lint.sh" --staged --custom-only; then
+    LINT_SCRIPT="$SCRIPT_DIR/lint.sh"
+  elif [[ -x "$SCRIPT_DIR/adapter-lint.sh" ]]; then
+    LINT_SCRIPT="$SCRIPT_DIR/adapter-lint.sh"
+  fi
+
+  if [[ -n "$LINT_SCRIPT" ]]; then
+    if ! "$LINT_SCRIPT" --staged --custom-only 2>/dev/null; then
       echo ""
       echo -e "${RED}❌ 代码检查未通过，请修复后再提交${NC}"
       echo -e "提示: 使用 ${BOLD}git commit --no-verify${NC} 跳过检查"
       exit 1
     fi
+  else
+    echo -e "${GREEN}无 lint 脚本，跳过代码检查${NC}"
   fi
 else
-  echo -e "${GREEN}没有 Kotlin 文件变更，跳过 lint${NC}"
+  echo -e "${GREEN}没有代码文件变更，跳过 lint${NC}"
 fi
 
 # ---- pl-pipeline 契约检查（pl-status --self-check）-------------------------
@@ -180,30 +194,30 @@ if echo "$COMMIT_MSG" | head -1 | grep -qE '^(Merge|Revert) '; then
   exit 0
 fi
 
-# 校验 Conventional Commits 格式
+# 校验 Conventional Commits 格式（与 CONTRIBUTING.md §2.2 一致）
 # <type>(<scope>): <subject>  或  <type>: <subject>
-PATTERN='^(feat|fix|refactor|docs|test|chore|style|perf)(\([a-zA-Z0-9_-]+\))?: .+'
+PATTERN='^(feat|fix|refactor|docs|test|chore|build)(\([a-zA-Z0-9_-]+\))?: .+'
 
 FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
 
 if ! echo "$FIRST_LINE" | grep -qE "$PATTERN"; then
   echo ""
-  echo -e "${RED}❌ Commit message 格式不符合 GIT-001-MSG 规范${NC}"
+  echo -e "${RED}❌ Commit message 格式不符合 pl-pipeline 规范${NC}"
   echo ""
   echo -e "${BOLD}期望格式:${NC} <type>(<scope>): <subject>"
   echo ""
-  echo -e "${BOLD}支持的 type:${NC}"
-  echo "  feat, fix, refactor, docs, test, chore, style, perf"
+  echo -e "${BOLD}支持的 type (7 种):${NC}"
+  echo "  feat, fix, refactor, docs, test, chore, build"
   echo ""
   echo -e "${BOLD}示例:${NC}"
-  echo "  feat(order): add blind box display"
-  echo "  fix(payment): correct discount calculation"
-  echo "  chore(build): update Gradle dependencies"
+  echo "  feat(adapter-nextjs): add vercel deploy skill"
+  echo "  fix(pl-core): handle missing .state.md gracefully"
+  echo "  docs(repo): update CONTRIBUTING commit rules"
   echo ""
   echo -e "当前消息: ${YELLOW}${FIRST_LINE}${NC}"
   echo ""
-  echo -e "提示: 使用 ${BOLD}./scripts/git-commit.sh${NC} 交互式生成规范消息"
-  echo -e "或使用 ${BOLD}git commit --no-verify${NC} 跳过校验"
+  echo -e "详见: ${BOLD}CONTRIBUTING.md §二.2 Git 协作规范${NC}"
+  echo -e "跳过校验: ${BOLD}git commit --no-verify${NC}"
   exit 1
 fi
 
@@ -211,12 +225,6 @@ fi
 if [[ ${#FIRST_LINE} -gt 72 ]]; then
   echo -e "${YELLOW}⚠️ Commit 标题过长 (${#FIRST_LINE} > 72 字符)${NC}"
   # 仅警告，不阻止
-fi
-
-# 检查是否有 TAPD 关联（可选提示）
-if ! echo "$COMMIT_MSG" | grep -q '\-\-story=\|\-\-bug='; then
-  echo -e "${YELLOW}💡 提示: 建议关联 TAPD (--story=ID 或 --bug=ID)${NC}"
-  # 仅提示，不阻止
 fi
 HOOK_EOF
 
@@ -275,8 +283,8 @@ log_success "post-commit hook 已安装"
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo -e "${BOLD}已安装的 Hooks:${NC}"
-echo "  📋 pre-commit   — Kotlin 代码检查 + pl-pipeline 契约 self-check"
-echo "  📋 commit-msg   — Commit message 格式校验 (GIT-001)"
+echo "  📋 pre-commit   — 代码检查（若 adapter 提供 lint 脚本）+ pl-pipeline 契约 self-check"
+echo "  📋 commit-msg   — Commit message 格式校验（7 种 type，对齐 CONTRIBUTING.md §二.2）"
 echo "  📋 post-commit  — pl-pipeline Dashboard 自动刷新"
 echo ""
 echo -e "移除: ${BOLD}./scripts/setup-hooks.sh --remove${NC}"
