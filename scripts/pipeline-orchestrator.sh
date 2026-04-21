@@ -27,7 +27,10 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=./_env.sh
+source "$SCRIPT_DIR/_env.sh"
+# 向后兼容：部分旧调用方仍用 PROJECT_ROOT
+PROJECT_ROOT="${PROJECT_ROOT:-$PL_PROJECT}"
 source "$SCRIPT_DIR/trace-emit.sh"
 
 # ---- 颜色 -------------------------------------------------------------------
@@ -382,9 +385,21 @@ main() {
   [[ -z "$page_id" ]] && { echo -e "${RED}Error: --page required${NC}"; exit 1; }
 
   # 查找 .state.md
+  # 优先级：新 pl/changes/<page_id>/.state.md > legacy openspec/**.state.md（向后兼容）
   local state_file
-  state_file=$(find "$PROJECT_ROOT/openspec" -name "${page_id}.state.md" 2>/dev/null | head -1)
-  [[ -z "$state_file" ]] && { echo -e "${RED}Error: ${page_id}.state.md not found in openspec/${NC}"; exit 1; }
+  if [[ -f "$PL_CHANGES/$page_id/.state.md" ]]; then
+    state_file="$PL_CHANGES/$page_id/.state.md"
+  else
+    # 兼容宿主项目 openspec 遗产路径（opsx@1.3 时代）
+    state_file=$(find "$PROJECT_ROOT/openspec" -name "${page_id}.state.md" 2>/dev/null | head -1)
+  fi
+  if [[ -z "$state_file" || ! -f "$state_file" ]]; then
+    echo -e "${RED}Error: ${page_id}.state.md not found in \$PL_CHANGES/$page_id/ or \$PROJECT_ROOT/openspec/${NC}"
+    echo -e "${DIM}Searched:${NC}"
+    echo -e "${DIM}  - $PL_CHANGES/$page_id/.state.md${NC}"
+    echo -e "${DIM}  - $PROJECT_ROOT/openspec/**/${page_id}.state.md${NC}"
+    exit 1
+  fi
 
   # 初始化 trace
   trace_init "$page_id"
