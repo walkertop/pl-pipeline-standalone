@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pl-pipeline.dev/adapter-sdk/schemas/adapter-manifest.schema.json",
+  "title": "pl-pipeline Adapter Manifest",
+  "description": "Schema for adapter.yaml - the manifest file at the root of every pl-pipeline adapter package. Declares what the adapter provides (templates/agents/skills/rules/scripts), what it requires (tools, pl/piao version), how it should be auto-detected, and how it integrates with the piao event journal.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "provides"],
+  "properties": {
+    "apiVersion": {
+      "description": "Manifest schema version. v1 is the only current version.",
+      "type": "string",
+      "const": "pl.dev/v1"
+    },
+    "kind": {
+      "description": "Manifest object kind. Must be 'Adapter'.",
+      "type": "string",
+      "const": "Adapter"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["id", "version", "compatible_pl"],
+      "properties": {
+        "id": {
+          "description": "Adapter machine ID. Lowercase kebab-case. Must match the package directory name after the 'adapter-' prefix (e.g., id='nextjs-web' → directory 'adapters/adapter-nextjs-web').",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": {
+          "description": "Human-readable adapter name (English or localized).",
+          "type": "string"
+        },
+        "description": {
+          "description": "One-paragraph description of what this adapter covers.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Adapter semver. Independent from pl-core version.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?$"
+        },
+        "compatible_pl": {
+          "description": "Semver range of pl-core this adapter supports. Standard semver range expression.",
+          "type": "string",
+          "examples": [">=1.0.0 <2.0.0", "^1.0.0", ">=0.1.0-mvp"]
+        },
+        "compatible_piao": {
+          "description": "Semver range of piao-kernel this adapter relies on. Optional; omit if adapter emits no piao events.",
+          "type": "string"
+        },
+        "authors": {
+          "description": "List of adapter authors/maintainers.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "email": { "type": "string", "format": "email" },
+              "url": { "type": "string", "format": "uri" }
+            }
+          }
+        },
+        "license": {
+          "description": "SPDX license identifier. Defaults to Apache-2.0 if unspecified.",
+          "type": "string"
+        },
+        "homepage": {
+          "type": "string",
+          "format": "uri"
+        },
+        "detect": {
+          "description": "Auto-detection rules used by `pl init --smart`. A project matches this adapter if ANY of the listed conditions is true (OR-of-rules). Empty/missing = manual selection only.",
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["file_exists"],
+                "properties": {
+                  "file_exists": {
+                    "description": "Path relative to target project root. Supports glob.",
+                    "type": "string"
+                  },
+                  "description": { "type": "string" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["package_json_has"],
+                "properties": {
+                  "package_json_has": {
+                    "description": "Key in package.json dependencies/devDependencies (e.g. 'next', 'react').",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["pyproject_has"],
+                "properties": {
+                  "pyproject_has": {
+                    "description": "Key in pyproject.toml tool.poetry.dependencies or project.dependencies (e.g. 'fastapi').",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["gradle_has"],
+                "properties": {
+                  "gradle_has": {
+                    "description": "String pattern present in build.gradle or build.gradle.kts.",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["cargo_has"],
+                "properties": {
+                  "cargo_has": {
+                    "description": "Crate name in Cargo.toml dependencies.",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["go_mod_has"],
+                "properties": {
+                  "go_mod_has": {
+                    "description": "Module path in go.mod.",
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "provides": {
+      "description": "Resources this adapter injects into the target host project when installed via `pl init --adapter <id>` or `scripts/adapter-install.sh`. See adapter-injection-contract.md for the full installation protocol.",
+      "type": "object",
+      "properties": {
+        "templates": {
+          "description": "Override/extend pl-core's 7 standard templates. Keys must match pl-core's template names.",
+          "type": "object",
+          "properties": {
+            "spec":         { "type": "string", "description": "Path inside adapter package to spec.md override." },
+            "plan":         { "type": "string" },
+            "taskdag":      { "type": "string" },
+            "api":          { "type": "string" },
+            "testmatrix":   { "type": "string" },
+            "deps":         { "type": "string" },
+            "state":        { "type": "string" },
+            "confirmation": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "agents": {
+          "description": "AI agent prompts to be installed into target project's .codebuddy/agents/ (or IDE-equivalent location per adapter-codebuddy / adapter-cursor / adapter-claude-code).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "path": {
+                "description": "Path inside adapter package (relative to adapter root).",
+                "type": "string"
+              },
+              "id": {
+                "description": "Logical agent id. Defaults to filename stem.",
+                "type": "string"
+              },
+              "ide_support": {
+                "description": "IDEs this agent is known to work with. Empty = all supported IDEs.",
+                "type": "array",
+                "items": { "type": "string", "enum": ["codebuddy", "cursor", "claude-code", "codex"] }
+              },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "skills": {
+          "description": "Skill markdown files with domain knowledge. Installed to target's .codebuddy/skills/.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string" },
+              "id":   { "type": "string" },
+              "triggers": {
+                "description": "Optional keyword list that suggests this skill. Used by IDE adapters to drive skill auto-loading.",
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "rules": {
+          "description": "Coding standards and conventions. Installed to target's .codebuddy/rules/.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string" },
+              "id":   { "type": "string" },
+              "scope": {
+                "description": "'always' = loaded every turn; 'on-demand' = loaded when agent requests or keyword matched.",
+                "type": "string",
+                "enum": ["always", "on-demand"]
+              },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "scripts": {
+          "description": "Shell scripts the adapter provides. Installed to target's scripts/ namespace (prefixed with 'adapter-' to avoid clash with pl-core scripts).",
+          "type": "object",
+          "properties": {
+            "build":   { "type": "string", "description": "Path to build command script." },
+            "verify":  { "type": "string", "description": "Path to verify/test script." },
+            "lint":    { "type": "string", "description": "Path to lint/static-check script." },
+            "deploy":  { "type": "string", "description": "Path to deploy script (optional)." }
+          },
+          "additionalProperties": {
+            "description": "Custom scripts beyond the four standard ones. Key becomes suffix of adapter-<id>-<key>.sh in target project.",
+            "type": "string"
+          }
+        },
+        "build_adapter": {
+          "description": "Build adapter configuration. Provides the commands that pl-core's should-build.sh, pipeline-orchestrator.sh, and future BuildAdapter protocol invoke to check compilation, run tests, lint code. Values are shell command strings executed in target project's root.",
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "description": "Identifier of the build tool / package manager.",
+              "type": "string",
+              "enum": ["npm", "pnpm", "yarn", "gradle", "maven", "cargo", "go", "uv", "pip", "poetry", "make", "xcodebuild", "custom"]
+            },
+            "commands": {
+              "type": "object",
+              "properties": {
+                "compile_check": {
+                  "description": "Fast compile/typecheck command. Invoked by pl-core's \\$PL_BUILD_CHECK_CMD environment variable.",
+                  "$ref": "#/$defs/command"
+                },
+                "lint": { "$ref": "#/$defs/command" },
+                "test": { "$ref": "#/$defs/command" },
+                "full_build": { "$ref": "#/$defs/command" }
+              },
+              "additionalProperties": { "$ref": "#/$defs/command" }
+            }
+          }
+        }
+      }
+    },
+    "requires": {
+      "description": "Runtime dependencies the target project's environment must satisfy. `pl doctor` will check these.",
+      "type": "object",
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "description": "Executable name checked via `command -v`.",
+                "type": "string"
+              },
+              "min_version": {
+                "description": "Semver min version requirement.",
+                "type": "string"
+              },
+              "install_hint": {
+                "description": "Human-readable hint on how to install this tool.",
+                "type": "string"
+              }
+            }
+          }
+        },
+        "files": {
+          "description": "Files/directories that MUST exist in target project root.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "piao_emit": {
+      "description": "Configuration for emitting L1 events to the piao kernel event journal. Omit this block if the adapter does not integrate with piao.",
+      "type": "object",
+      "required": ["urn_namespace"],
+      "properties": {
+        "on_stages": {
+          "description": "pl-core stages at whose transitions the adapter should emit artifact.published events.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["SPEC", "PLAN", "IMPLEMENT", "VERIFY", "OBSERVE", "ARCHIVE"]
+          }
+        },
+        "urn_namespace": {
+          "description": "URN prefix for this adapter's artifacts. Must start with 'urn:piao:artifact:pl:' per convention.",
+          "type": "string",
+          "pattern": "^urn:piao:[a-z_]+:pl:[a-z_][a-z0-9_-]*$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "oneOf": [
+        {
+          "description": "Shorthand: just the command string.",
+          "type": "string"
+        },
+        {
+          "description": "Full form with success pattern and timeout.",
+          "type": "object",
+          "required": ["cmd"],
+          "properties": {
+            "cmd": { "type": "string" },
+            "success_pattern": {
+              "description": "Regex pattern matched against stdout/stderr to confirm success (in addition to exit 0).",
+              "type": "string"
+            },
+            "failure_patterns": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "timeout_sec": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "working_dir": {
+              "description": "Relative to target project root. Defaults to root.",
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
