@@ -110,8 +110,6 @@ pl-pipeline-standalone/
 │   ├── trace-report.sh                      (零耦合，直接可用)
 │   ├── should-build.sh                      (零耦合，直接可用)
 │   ├── setup-hooks.sh                       (零耦合，直接可用)
-│   ├── pipeline-visualizer.sh
-│   ├── pipeline-visualizer.js               (432 行 JS 可视化)
 │   └── log-error.sh
 │
 ├── adapters/                                ← IDE 集成
