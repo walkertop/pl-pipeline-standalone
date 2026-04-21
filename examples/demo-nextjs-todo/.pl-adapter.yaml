@@ -1,0 +1,35 @@
+# Managed by pl-pipeline adapter-install.sh
+# Do not edit by hand; use adapter-install --upgrade / --remove instead.
+
+apiVersion: pl.dev/v1
+adapter:
+  id: nextjs-web
+  version: 0.1.0
+  name: "Next.js Web 项目全家桶"
+  installed_at: "2026-04-21T14:43:50Z"
+  installed_from: "$PL_HOME/adapters/adapter-nextjs-web"
+  source_sha256: "5ed72d835cf3ce2f77afce8604c07bd7338ff48ee54a4a3d4af301cb8b1e16fa"
+
+installed_files:
+  - pl/templates/spec.md
+  - pl/templates/plan.md
+  - pl/templates/taskdag.md
+  - .codebuddy/agents/nextjs-architect.md
+  - .codebuddy/agents/nextjs-reviewer.md
+  - .codebuddy/skills/react-server-components.md
+  - .codebuddy/skills/nextjs-app-router.md
+  - .codebuddy/skills/nextjs-data-fetching.md
+  - .codebuddy/skills/nextjs-performance.md
+  - .codebuddy/rules/typescript-strict.md
+  - .codebuddy/rules/nextjs-conventions.md
+  - .codebuddy/rules/react-hooks.md
+  - scripts/adapter-nextjs-web-build.sh
+  - scripts/adapter-nextjs-web-verify.sh
+  - scripts/adapter-nextjs-web-lint.sh
+
+build_adapter:
+  type: npm
+  env:
+    PL_BUILD_CHECK_CMD: "npx tsc --noEmit"
+    PL_LINT_CMD: "npx next lint"
+    PL_TEST_CMD: "npm test -- --ci --passWithNoTests"
