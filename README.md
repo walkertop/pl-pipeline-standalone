@@ -213,9 +213,39 @@ commands:
 
 - ✅ 核心引擎已验证：在 Kotlin Multiplatform 大型迁移项目中完成 11/16 任务（4831 行代码、0 回归、全程可追溯）
 - ✅ 6 阶段 + 7 门禁 + 7 产物契约稳定
+- ✅ **三层架构已就位**（piao-kernel / pl-core / adapters）
+- ✅ **首批 adapter 开放**（`adapter-nextjs-web` / `adapter-python-fastapi`）
+- ✅ **adapter 脚手架可用**（`scripts/adapter-create.sh`）
 - 🚧 多 IDE Adapter 正在开发
-- 🚧 Preset Library 开放社区贡献
+- 🚧 社区贡献的 adapter 生态建设中
 - 🚧 文档站和 Playground 建设中
+
+### Adapter 全家桶
+
+Adapter 是把"技术栈最佳实践"一键注入宿主项目的载体。每个 adapter 提供：
+
+| 资产 | 作用 |
+|---|---|
+| **templates** | 覆盖 pl-core 默认的 spec/plan/taskdag，贴合场景字段 |
+| **agents** | AI 架构师 / 审查员 prompt（RSC 决策、事务边界、OpenAPI 契约…） |
+| **skills** | 技术栈知识库（RSC / Pydantic v2 / SQLAlchemy async…） |
+| **rules** | 编码规范与硬性约束（TS 严格、Python 类型、FastAPI 约定…） |
+| **scripts** | build / verify / lint 三件套 |
+| **build_adapter** | 给 pl-core 的 `$PL_BUILD_CHECK_CMD` 注入正确的构建命令 |
+
+一键安装：
+
+```bash
+# 在你的 Next.js 项目根目录
+bash $PL_HOME/scripts/adapter-install.sh $PL_HOME/adapters/adapter-nextjs-web .
+```
+
+新建自己的 adapter：
+
+```bash
+bash $PL_HOME/scripts/adapter-create.sh my-stack --full
+# → adapters/adapter-my-stack/ 骨架就绪，adapter-validate 自动通过
+```
 
 ---
 
