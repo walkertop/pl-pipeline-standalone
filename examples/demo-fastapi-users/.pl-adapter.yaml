@@ -1,0 +1,35 @@
+# Managed by pl-pipeline adapter-install.sh
+# Do not edit by hand; use adapter-install --upgrade / --remove instead.
+
+apiVersion: pl.dev/v1
+adapter:
+  id: python-fastapi
+  version: 0.1.0
+  name: "Python FastAPI 后端全家桶"
+  installed_at: "2026-04-21T14:47:36Z"
+  installed_from: "$PL_HOME/adapters/adapter-python-fastapi"
+  source_sha256: "55477e9e4e757f4bdef3b63d438b0969b821e156b80f9ff4f0917b266cc48214"
+
+installed_files:
+  - pl/templates/spec.md
+  - pl/templates/plan.md
+  - pl/templates/taskdag.md
+  - .codebuddy/agents/fastapi-architect.md
+  - .codebuddy/agents/fastapi-reviewer.md
+  - .codebuddy/skills/fastapi-dependency-injection.md
+  - .codebuddy/skills/pydantic-v2-patterns.md
+  - .codebuddy/skills/sqlalchemy-async.md
+  - .codebuddy/skills/pytest-async.md
+  - .codebuddy/rules/python-typing-strict.md
+  - .codebuddy/rules/fastapi-conventions.md
+  - .codebuddy/rules/api-error-handling.md
+  - scripts/adapter-python-fastapi-build.sh
+  - scripts/adapter-python-fastapi-verify.sh
+  - scripts/adapter-python-fastapi-lint.sh
+
+build_adapter:
+  type: uv
+  env:
+    PL_BUILD_CHECK_CMD: "uv run python -c 'import py_compile, pathlib; [py_compile.compile(str(p), doraise=True) for p in pathlib.Path(\"app\").rglob(\"*.py\")]'"
+    PL_LINT_CMD: "uv run ruff check ."
+    PL_TEST_CMD: "uv run pytest -q"

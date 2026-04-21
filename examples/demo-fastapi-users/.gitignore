@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# uv / poetry lockfile（本 demo 不入库）
+uv.lock
+poetry.lock
+
+# SQLite
+*.db
+*.sqlite3
+
+# 环境
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# pl-pipeline 运行时输出
+pipeline-output/
