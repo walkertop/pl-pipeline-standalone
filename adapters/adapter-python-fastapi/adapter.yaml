@@ -1,0 +1,97 @@
+apiVersion: pl.dev/v1
+kind: Adapter
+
+metadata:
+  id: python-fastapi
+  name: Python FastAPI 后端全家桶
+  description: >
+    面向 Python 3.11+ / FastAPI / Pydantic v2 / SQLAlchemy 2.x / pytest 的
+    pl-pipeline 适配器。提供 REST API 场景的 spec/plan/taskdag 模板、
+    依赖注入/Pydantic/异步 ORM skills、类型/命名/错误处理 rules、以及
+    build/verify/lint 三件套脚本。
+  version: 0.1.0
+  compatible_pl: ">=0.1.0-mvp <1.0.0"
+  compatible_piao: ">=0.1.0"
+  license: Apache-2.0
+  homepage: https://github.com/walkertop/pl-pipeline-standalone
+  authors:
+    - name: walker
+      email: bin5211bin@gmail.com
+  detect:
+    - file_exists: "pyproject.toml"
+    - pyproject_has: "fastapi"
+
+provides:
+  templates:
+    spec: "templates/spec.md"
+    plan: "templates/plan.md"
+    taskdag: "templates/taskdag.md"
+  agents:
+    - path: "agents/fastapi-architect.md"
+      id: fastapi-architect
+      ide_support: [codebuddy, cursor, claude-code]
+      description: "FastAPI 后端架构师：路由/依赖注入/数据模型/事务边界"
+    - path: "agents/fastapi-reviewer.md"
+      id: fastapi-reviewer
+      ide_support: [codebuddy, cursor, claude-code]
+      description: "FastAPI 代码审查员：类型/安全/性能/OpenAPI 契约"
+  skills:
+    - id: fastapi-dependency-injection
+      path: "skills/fastapi-dependency-injection.md"
+      triggers: ["depends", "dependency", "di", "fastapi depends"]
+      description: "FastAPI Depends 依赖注入模式与生命周期"
+    - id: pydantic-v2-patterns
+      path: "skills/pydantic-v2-patterns.md"
+      triggers: ["pydantic", "basemodel", "validator", "field_validator"]
+      description: "Pydantic v2 数据建模、校验、序列化"
+    - id: sqlalchemy-async
+      path: "skills/sqlalchemy-async.md"
+      triggers: ["sqlalchemy", "async session", "asyncpg", "alembic"]
+      description: "SQLAlchemy 2.x 异步会话与事务模式"
+    - id: pytest-async
+      path: "skills/pytest-async.md"
+      triggers: ["pytest", "pytest-asyncio", "httpx", "test client"]
+      description: "pytest + httpx 异步测试模式"
+  rules:
+    - id: python-typing-strict
+      path: "rules/python-typing-strict.md"
+      scope: always
+      description: "Python 类型注解强制与 mypy/pyright 约束"
+    - id: fastapi-conventions
+      path: "rules/fastapi-conventions.md"
+      scope: always
+      description: "路由组织、status_code、response_model、错误处理约定"
+    - id: api-error-handling
+      path: "rules/api-error-handling.md"
+      scope: on-demand
+      description: "API 错误分类、HTTP status 与 problem+json"
+  scripts:
+    build: "scripts/build.sh"
+    verify: "scripts/verify.sh"
+    lint: "scripts/lint.sh"
+  build_adapter:
+    type: uv
+    commands:
+      compile_check:
+        cmd: "uv run python -c 'import py_compile, pathlib; [py_compile.compile(str(p), doraise=True) for p in pathlib.Path(\"app\").rglob(\"*.py\")]'"
+        success_pattern: "^$"
+        timeout_sec: 60
+      lint: "uv run ruff check ."
+      test: "uv run pytest -q"
+      full_build:
+        cmd: "uv sync && uv run python -m compileall app"
+        timeout_sec: 300
+
+requires:
+  tools:
+    - name: python3
+      min_version: "3.11"
+      install_hint: "brew install python@3.12 或 pyenv install 3.12"
+    - name: uv
+      install_hint: "curl -LsSf https://astral.sh/uv/install.sh | sh"
+  files:
+    - pyproject.toml
+
+piao_emit:
+  on_stages: [VERIFY, ARCHIVE]
+  urn_namespace: "urn:piao:artifact:pl:python-fastapi"
