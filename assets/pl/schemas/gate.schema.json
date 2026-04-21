@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pl-pipeline.dev/pl/schemas/gate.schema.json",
+  "title": "pl-pipeline Gate & Check Definition",
+  "description": "可执行契约层（E1）的数据模型。由 `pl/config.yaml` 的 `gates:` 和 `checks:` 段使用，被 `pl-runner.sh` 消费。",
+  "$defs": {
+    "checkRef": {
+      "description": "引用一个已声明 check 的 id，或内联声明一个一次性 check。",
+      "oneOf": [
+        { "type": "string", "description": "check id 引用（如 'compile'）" },
+        { "$ref": "#/$defs/check" }
+      ]
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "cmd"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "check 机器 id"
+        },
+        "label": {
+          "type": "string",
+          "description": "人类可读标签"
+        },
+        "cmd": {
+          "type": "string",
+          "description": "要执行的 shell 命令。支持 ${ENV_VAR} 占位，由 adapter 通过 .pl-adapter.yaml 的 build_adapter.env 填充。例：'${PL_BUILD_CHECK_CMD}'"
+        },
+        "cwd": {
+          "type": "string",
+          "description": "执行目录，相对 $PL_PROJECT，默认为 $PL_PROJECT"
+        },
+        "timeout_sec": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 180
+        },
+        "success_pattern": {
+          "type": "string",
+          "description": "除 exit 0 外，要求 stdout+stderr 匹配此正则"
+        },
+        "failure_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "任何一条匹配即判定 fail（优先级高于 exit code）"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true,
+          "description": "false = check 缺 cmd 时跳过而非 fail（如 adapter 未声明 lint 命令）"
+        },
+        "emit_event": {
+          "type": "string",
+          "default": "check.run",
+          "description": "写入 trace 时使用的事件类型"
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["id", "from", "to"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_-]*$",
+          "description": "门禁机器 id（如 A0, D, E_smoke）"
+        },
+        "from": {
+          "type": "string",
+          "description": "前置阶段名"
+        },
+        "to": {
+          "type": "string",
+          "description": "后继阶段名"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["external", "internal"],
+          "default": "external",
+          "description": "internal = 阶段内的子门禁（如 IMPLEMENT 内 C）"
+        },
+        "criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "v1 兼容字段：人类可读判据。与 checks 并存时 checks 优先"
+        },
+        "checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/checkRef" },
+          "description": "机器可执行 check 列表。优先于 criteria"
+        },
+        "eval": {
+          "type": "string",
+          "enum": [
+            "all_checks.pass",
+            "any_checks.pass",
+            "majority_checks.pass"
+          ],
+          "default": "all_checks.pass",
+          "description": "gate 评估规则。未来可扩 DSL 表达式"
+        },
+        "on_failure": {
+          "type": "string",
+          "enum": ["block", "warn", "skip"],
+          "default": "block",
+          "description": "eval 失败时的动作。block = 写 gate_status=BLOCKED；warn = 继续但记录；skip = 视为通过"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "description": "该 schema 只描述 $defs 片段；具体在 config.yaml 里的使用方式见 pl/config.yaml 的 gates: / checks: 节"
+}

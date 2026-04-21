@@ -254,6 +254,78 @@
                 "full_build": { "$ref": "#/$defs/command" }
               },
               "additionalProperties": { "$ref": "#/$defs/command" }
+            },
+            "smoke": {
+              "description": "Cold-start smoke test configuration (v1.1+, used by pl-core's pl-smoke.sh). Defines how to boot the app, when it's considered ready, and which probes to run. Omit this block to skip SMOKE stage for this adapter.",
+              "type": "object",
+              "required": ["start_cmd", "ready_url"],
+              "properties": {
+                "start_cmd": {
+                  "description": "Shell command to boot the application. Should accept $SMOKE_PORT env var.",
+                  "type": "string"
+                },
+                "cwd": {
+                  "description": "Working directory relative to $PL_PROJECT. Defaults to $PL_PROJECT.",
+                  "type": "string"
+                },
+                "env": {
+                  "description": "Extra environment variables for the boot command.",
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                },
+                "ready_url": {
+                  "description": "HTTP URL to poll until HTTP 200 signals 'app ready'. Usually a /health or /.",
+                  "type": "string"
+                },
+                "ready_timeout_sec": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 30
+                },
+                "shutdown_grace_sec": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 3
+                },
+                "probes": {
+                  "description": "Ordered list of HTTP probes. Each probe's pass/fail contributes one check.run event to trace.",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "url"],
+                    "properties": {
+                      "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+                      "method": {
+                        "type": "string",
+                        "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"],
+                        "default": "GET"
+                      },
+                      "url": { "type": "string", "description": "Relative path (e.g. /api/v1/users) or absolute URL. $SMOKE_PORT available." },
+                      "headers": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "body": {
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "object" }
+                        ]
+                      },
+                      "expect_status": {
+                        "type": "integer",
+                        "default": 200
+                      },
+                      "expect_body_regex": {
+                        "type": "string"
+                      },
+                      "timeout_sec": {
+                        "type": "integer",
+                        "default": 10
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         }

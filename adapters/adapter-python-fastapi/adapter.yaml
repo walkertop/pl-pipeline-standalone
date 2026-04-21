@@ -81,6 +81,30 @@ provides:
       full_build:
         cmd: "uv sync && uv run python -m compileall app"
         timeout_sec: 300
+    smoke:
+      start_cmd: "uv run uvicorn app.main:app --host 127.0.0.1 --port $SMOKE_PORT"
+      ready_url: "http://127.0.0.1:$SMOKE_PORT/health"
+      ready_timeout_sec: 20
+      shutdown_grace_sec: 2
+      probes:
+        - id: register_happy
+          method: POST
+          url: "/auth/register"
+          headers:
+            content-type: "application/json"
+          body: '{"email":"smoke@test.com","password":"password1"}'
+          expect_status: 201
+        - id: register_duplicate
+          method: POST
+          url: "/auth/register"
+          headers:
+            content-type: "application/json"
+          body: '{"email":"smoke@test.com","password":"password1"}'
+          expect_status: 409
+        - id: list_unauthorized
+          method: GET
+          url: "/api/v1/users"
+          expect_status: 401
 
 requires:
   tools:

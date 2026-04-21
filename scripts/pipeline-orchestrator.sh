@@ -41,26 +41,37 @@ BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
 # ---- 阶段定义 ----------------------------------------------------------------
 
 # 有序阶段列表（空格分隔字符串，兼容 bash 3.x）
-ORDERED_STAGES="SPEC PLAN IMPLEMENT VERIFY OBSERVE ARCHIVE"
+# SMOKE 于 v1.1 由 retro-v2 E2 新增，位于 VERIFY 后、OBSERVE 前
+ORDERED_STAGES="SPEC PLAN IMPLEMENT VERIFY SMOKE OBSERVE ARCHIVE"
 
 # 阶段 → 序号（用函数查表替代 declare -A）
 stage_order() {
   case "$1" in
     SPEC) echo 0 ;; PLAN) echo 1 ;; IMPLEMENT) echo 2 ;;
-    VERIFY) echo 3 ;; OBSERVE) echo 4 ;; ARCHIVE) echo 5 ;;
+    VERIFY) echo 3 ;; SMOKE) echo 4 ;; OBSERVE) echo 5 ;; ARCHIVE) echo 6 ;;
     *) echo 99 ;;
   esac
 }
 
 # 阶段 → 执行器
+# 优先级：环境变量 ${STAGE}_ACTOR（如 VERIFY_ACTOR）> pl/config.yaml stages[].owner_actor > 通用默认
+# 通用默认不再绑定宿主业务（原硬编码 migration-* 已移除，见 retro-v2 E1 解耦项）
 stage_actor() {
-  case "$1" in
-    SPEC)      echo "agent:migration-analyzer" ;;
-    PLAN)      echo "agent:migration-analyzer" ;;
-    IMPLEMENT) echo "agent:migration-coder" ;;
-    VERIFY)    echo "script:migration-verify" ;;
-    OBSERVE)   echo "agent:migration-guardian" ;;
-    ARCHIVE)   echo "agent:knowledge-archiver" ;;
+  local stage="$1"
+  local env_var="${stage}_ACTOR"
+  local env_val="${!env_var:-}"
+  if [[ -n "$env_val" ]]; then
+    echo "$env_val"
+    return
+  fi
+  case "$stage" in
+    SPEC)      echo "agent:spec-author" ;;
+    PLAN)      echo "agent:planner" ;;
+    IMPLEMENT) echo "agent:coder" ;;
+    VERIFY)    echo "script:pl-runner" ;;
+    SMOKE)     echo "script:pl-smoke" ;;
+    OBSERVE)   echo "agent:guardian" ;;
+    ARCHIVE)   echo "agent:archiver" ;;
     *)         echo "unknown" ;;
   esac
 }
@@ -82,7 +93,7 @@ stage_gate() {
 stage_emoji() {
   case "$1" in
     SPEC) echo "📝" ;; PLAN) echo "🗂" ;; IMPLEMENT) echo "💻" ;;
-    VERIFY) echo "🔍" ;; OBSERVE) echo "📡" ;; ARCHIVE) echo "📦" ;;
+    VERIFY) echo "🔍" ;; SMOKE) echo "🔥" ;; OBSERVE) echo "📡" ;; ARCHIVE) echo "📦" ;;
     *) echo "❓" ;;
   esac
 }

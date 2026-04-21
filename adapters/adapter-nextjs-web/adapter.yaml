@@ -84,6 +84,9 @@ provides:
       full_build:
         cmd: "npm run build"
         timeout_sec: 600
+    # Next.js 的 SMOKE 暂不配置：dev server 启动慢 + HMR 使 probe 不稳定。
+    # 本 adapter 的 SMOKE 等价物由 full_build (next build) 承担——build 成功
+    # = 产物可部署。未来版本会加 'next start' + HTTP probe 模式。
 
 requires:
   tools:
