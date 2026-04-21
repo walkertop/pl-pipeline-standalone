@@ -13,7 +13,11 @@ export function TodoItem({ todo }: { todo: Todo }) {
           type="checkbox"
           checked={todo.completed}
           disabled={pending}
-          onChange={() => startTransition(() => toggleTodo(todo.id))}
+          onChange={() => {
+            startTransition(() => {
+              void toggleTodo(todo.id)
+            })
+          }}
         />
         <span
           style={{

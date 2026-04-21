@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidateTag } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createTodoRecord, toggleTodoRecord, type Todo } from '../lib/data'
 
@@ -31,11 +31,13 @@ export async function createTodo(
     return { ok: false, error: code }
   }
   const todo = await createTodoRecord(parsed.data.title)
-  revalidateTag('todos')
+  // 数据源是模块级 Map（非 fetch），用 revalidatePath 让 RSC 重渲染
+  revalidatePath('/todos')
   return { ok: true, todo }
 }
 
 export async function toggleTodo(id: string): Promise<void> {
   await toggleTodoRecord(id)
-  revalidateTag('todos')
+  revalidatePath('/todos')
 }
+

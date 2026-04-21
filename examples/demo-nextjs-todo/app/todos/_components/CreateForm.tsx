@@ -1,17 +1,18 @@
 'use client'
 
-import { useFormState, useFormStatus } from 'react-dom'
+import { useActionState } from 'react'
+import { useFormStatus } from 'react-dom'
 import { createTodo, type CreateState } from '../_actions/todos'
 
 const INITIAL: CreateState = { ok: null }
 
-const ERROR_MESSAGE: Record<'title_required' | 'title_too_long', string> = {
+const ERROR_MESSAGE = {
   title_required: '请输入标题',
   title_too_long: '标题不能超过 100 字',
-}
+} as const
 
 export function CreateForm() {
-  const [state, formAction] = useFormState(createTodo, INITIAL)
+  const [state, formAction] = useActionState(createTodo, INITIAL)
   return (
     <form action={formAction}>
       <label htmlFor="title">New todo</label>
