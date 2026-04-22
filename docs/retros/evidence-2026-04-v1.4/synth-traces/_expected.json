@@ -1,0 +1,89 @@
+{
+  "scenarios": [
+    {
+      "run": 1,
+      "scenario": "normal-pass",
+      "events": 27,
+      "expected_patterns": []
+    },
+    {
+      "run": 2,
+      "scenario": "lint-fail-blocks-d",
+      "events": 14,
+      "expected_patterns": [
+        {
+          "antecedent": "check.run:lint:fail",
+          "target": "gate.eval:D:blocked"
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "scenario": "tsc-fail-blocks-d",
+      "events": 14,
+      "expected_patterns": [
+        {
+          "antecedent": "check.run:tsc:fail",
+          "target": "gate.eval:D:blocked"
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "scenario": "package-json-without-install",
+      "events": 16,
+      "expected_patterns": [
+        {
+          "antecedent": "artifact.modified:.json",
+          "target": "check.run:install:fail"
+        }
+      ]
+    },
+    {
+      "run": 5,
+      "scenario": "smoke-probe-fail",
+      "events": 22,
+      "expected_patterns": [
+        {
+          "antecedent": "smoke.boot",
+          "target": "check.run:probe:register:fail"
+        }
+      ]
+    },
+    {
+      "run": 6,
+      "scenario": "lint-retry-burst",
+      "events": 16,
+      "expected_patterns": []
+    },
+    {
+      "run": 7,
+      "scenario": "normal-pass-2",
+      "events": 27,
+      "expected_patterns": []
+    },
+    {
+      "run": 8,
+      "scenario": "tsc-slow",
+      "events": 27,
+      "expected_patterns": []
+    },
+    {
+      "run": 9,
+      "scenario": "lint-fail-again",
+      "events": 14,
+      "expected_patterns": []
+    },
+    {
+      "run": 10,
+      "scenario": "test-fail",
+      "events": 15,
+      "expected_patterns": [
+        {
+          "antecedent": "check.run:test:fail",
+          "target": "gate.eval:D:blocked"
+        }
+      ]
+    }
+  ]
+}
