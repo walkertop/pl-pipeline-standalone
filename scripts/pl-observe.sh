@@ -78,11 +78,38 @@ done
 # ─── 日志（绿色图标） ────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
 
+# 规则文件路径
+RULES_FILE="${PL_OBSERVE_RULES:-$PL_HOME/assets/pl/observe-rules.default.yaml}"
+
+apply_rules() {
+  if [[ -f "$RULES_FILE" ]]; then
+    local apply_args=(
+      "$SCRIPT_DIR/_lib/observe-apply-rules.py"
+      --project    "$PL_PROJECT"
+      --change     "$CHANGE"
+      --rules-file "$RULES_FILE"
+    )
+    [[ $VERBOSE -eq 1 ]] && apply_args+=(--verbose)
+    python3 "${apply_args[@]}" || true
+  fi
+}
+
 if [[ "$MODE" == "loop" ]]; then
   printf "${BLUE}ℹ${NC} observing %s (loop, interval=%ss)  change=%s  phase=%s\n" \
     "$PL_PROJECT" "$INTERVAL" "$CHANGE" "$PHASE"
+  # loop 模式：python 内循环跑 fs scan，我们定期跑 apply-rules
+  # 简单做法：让 python --loop 自己循环，我们额外开后台每 N 秒跑 apply-rules
+  (
+    while true; do
+      sleep "$INTERVAL"
+      apply_rules
+    done
+  ) &
+  RULES_PID=$!
+  trap "kill $RULES_PID 2>/dev/null" EXIT INT TERM
+  python3 "${PY_ARGS[@]}"
 else
   printf "${BLUE}ℹ${NC} scanning %s  change=%s  phase=%s\n" "$PL_PROJECT" "$CHANGE" "$PHASE"
+  python3 "${PY_ARGS[@]}"
+  apply_rules
 fi
-
-exec python3 "${PY_ARGS[@]}"

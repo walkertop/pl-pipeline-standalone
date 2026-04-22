@@ -114,12 +114,27 @@ def scan(project: Path, globs):
 
 
 def compute_sha_for_diff(project: Path, paths):
-    """只对 diff 中涉及的文件算 sha256（性能优化）"""
+    """只对 diff 中涉及的文件算 sha256（性能优化）+ 写入 content-cache"""
     result = {}
+    cache_dir = project / "pipeline-output" / "observe" / "content-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
     for rel in paths:
         full = project / rel
         if full.exists():
-            result[rel] = sha256_of(full)
+            sha = sha256_of(full)
+            result[rel] = sha
+            # 只缓存小文本文件（markdown / yaml / source code），限制 256KB
+            try:
+                if full.stat().st_size <= 256 * 1024:
+                    cache_file = cache_dir / f"{sha}.txt"
+                    if not cache_file.exists():
+                        try:
+                            content = full.read_text(encoding="utf-8")
+                            cache_file.write_text(content, encoding="utf-8")
+                        except (UnicodeDecodeError, OSError):
+                            pass  # 二进制文件跳过
+            except OSError:
+                pass
     return result
 
 
