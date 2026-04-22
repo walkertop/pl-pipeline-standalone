@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pl-pipeline · Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f6bff'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='15' font-weight='800'%3Epl%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-brand-mark">pl</div>
+    <span>pl-pipeline Dashboard</span>
+    <span class="nav-meta" style="margin-left: 12px;">v1.3 observe</span>
+  </div>
+  <button class="theme-toggle" id="theme-toggle" title="切换主题">
+    <span id="theme-icon">☀</span>
+  </button>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">Changes</h1>
+  <p class="page-sub">项目里所有变更（change）的当前状态。点击卡片查看完整 trace。</p>
+
+  <div id="grid" class="grid"></div>
+
+  <div id="empty" class="empty" style="display:none">
+    <div class="empty-icon">📭</div>
+    <div>还没有 change 产出 events</div>
+    <div class="muted" style="margin-top: 8px; font-size: 12px">
+      运行 <code>bash $PL_HOME/scripts/pl-observe.sh --change &lt;id&gt;</code> 开始观察
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { parseJSONL, aggregateChange, STAGES, stageStatus, fmtRelative } from './assets/parser.js';
+import { initTheme } from './assets/theme.js';
+
+initTheme();
+
+async function loadIndex() {
+  try {
+    const resp = await fetch('./_data.json');
+    if (!resp.ok) throw new Error('no _data.json');
+    return await resp.json();
+  } catch {
+    return { changes: [] };
+  }
+}
+
+async function loadChangeEvents(changeId, tracePath) {
+  const resp = await fetch(tracePath);
+  if (!resp.ok) return [];
+  const text = await resp.text();
+  return parseJSONL(text);
+}
+
+function renderStagePipeline(agg) {
+  return STAGES.map((s, i) => {
+    const status = stageStatus(agg, s);
+    const arrow = i < STAGES.length - 1 ? '<div class="stage-arrow"></div>' : '';
+    return `
+      <div class="stage-step ${status}">
+        <div class="stage-dot">${status === 'done' ? '✓' : status === 'blocked' ? '✗' : ''}</div>
+        <div class="stage-label">${s}</div>
+      </div>${arrow}
+    `;
+  }).join('');
+}
+
+function gateStatusBadge(status) {
+  if (status === 'PASSED') return '<span class="badge badge-green">passed</span>';
+  if (status === 'BLOCKED') return '<span class="badge badge-red">blocked</span>';
+  if (status === 'SKIPPED') return '<span class="badge badge-yellow">skipped</span>';
+  return '<span class="badge badge-blue">in progress</span>';
+}
+
+function renderCard(agg) {
+  const stageText = agg.stage;
+  return `
+    <a class="card" href="change.html?id=${encodeURIComponent(agg.change_id)}" style="color:inherit; display:block;">
+      <div class="card-head">
+        <h3 class="card-title">${agg.change_id}</h3>
+        ${gateStatusBadge(agg.gate_status)}
+      </div>
+      <div class="card-stage">${stageText}</div>
+
+      <div style="margin: 14px 0 10px 0;">
+        <div style="display:flex; gap:4px; align-items:center;">
+          ${renderStagePipeline(agg).replace(/<div class="stage-label">.*?<\/div>/g,'').replace(/min-width: 90px/g,'min-width: 32px')}
+        </div>
+      </div>
+
+      <div class="card-stats">
+        <span class="card-stat" title="任务">◇ ${agg.tasks_done || 0}/${agg.tasks_total || 0}</span>
+        <span class="card-stat" title="事件总数">● ${agg.total_events}</span>
+        ${agg.violation_count > 0 ? `<span class="card-stat" style="color:var(--red)">⚠ ${agg.violation_count}</span>` : ''}
+        <span class="card-stat dim" style="margin-left:auto">${fmtRelative(agg.last_event_ts)}</span>
+      </div>
+    </a>
+  `;
+}
+
+async function render() {
+  const idx = await loadIndex();
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('empty');
+
+  if (!idx.changes || idx.changes.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+
+  const cards = [];
+  for (const c of idx.changes) {
+    const events = await loadChangeEvents(c.id, c.trace_path);
+    if (events.length === 0) continue;
+    const agg = aggregateChange(events);
+    if (agg) cards.push(renderCard(agg));
+  }
+
+  if (cards.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+
+  grid.innerHTML = cards.join('');
+}
+
+render();
+</script>
+
+</body>
+</html>

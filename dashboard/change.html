@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pl-pipeline · Change Detail</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f6bff'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='15' font-weight='800'%3Epl%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-brand-mark">pl</div>
+    <span id="brand-title">pl-pipeline Dashboard</span>
+    <span class="nav-meta" style="margin-left: 12px;" id="brand-meta"></span>
+  </div>
+  <button class="theme-toggle" id="theme-toggle" title="切换主题">
+    <span id="theme-icon">☀</span>
+  </button>
+</nav>
+
+<div class="page">
+  <a class="back-link" href="index.html">← Back to list</a>
+  <h1 class="page-title" id="change-title">loading…</h1>
+  <p class="page-sub" id="change-sub"></p>
+
+  <div class="info-grid" id="info-grid"></div>
+
+  <div class="stage-row" id="stage-row"></div>
+
+  <div class="timeline-head">
+    <h2>Timeline <span class="muted" id="event-count"></span></h2>
+    <div class="timeline-filter">
+      <label><input type="checkbox" id="flt-artifact" checked> artifact.*</label>
+      <label><input type="checkbox" id="flt-business" checked> business</label>
+      <label><input type="checkbox" id="flt-gate" checked> gate/check</label>
+    </div>
+  </div>
+
+  <div id="events" class="events"></div>
+</div>
+
+<script type="module">
+import { parseJSONL, aggregateChange, STAGES, stageStatus, renderEvent, isCritical, fmtTs } from './assets/parser.js';
+import { initTheme } from './assets/theme.js';
+
+initTheme();
+
+const params = new URLSearchParams(location.search);
+const changeId = params.get('id');
+
+if (!changeId) {
+  document.getElementById('change-title').textContent = 'no change id';
+  throw new Error('missing id');
+}
+
+async function loadIndex() {
+  const resp = await fetch('./_data.json');
+  if (!resp.ok) return { changes: [] };
+  return await resp.json();
+}
+
+async function loadEvents(path) {
+  const resp = await fetch(path);
+  if (!resp.ok) return [];
+  return parseJSONL(await resp.text());
+}
+
+function renderStagePipeline(agg) {
+  return STAGES.map((s, i) => {
+    const status = stageStatus(agg, s);
+    const arrow = i < STAGES.length - 1 ? '<div class="stage-arrow"></div>' : '';
+    return `
+      <div class="stage-step ${status}">
+        <div class="stage-dot">${status === 'done' ? '✓' : status === 'blocked' ? '✗' : ''}</div>
+        <div class="stage-label">${s}</div>
+      </div>${arrow}
+    `;
+  }).join('');
+}
+
+function renderInfoCards(agg) {
+  const gateText = agg.gate_status.toLowerCase();
+  return `
+    <div class="info-card">
+      <div class="info-label">Stage</div>
+      <div class="info-value">${agg.stage}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Gate</div>
+      <div class="info-value" style="color:${agg.gate_status==='BLOCKED'?'var(--red)':agg.gate_status==='PASSED'?'var(--green)':''}">${gateText}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Tasks</div>
+      <div class="info-value">${agg.tasks_done}/${agg.tasks_total}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Events</div>
+      <div class="info-value">${agg.total_events}</div>
+    </div>
+  `;
+}
+
+function categorize(e) {
+  if (e.event && e.event.startsWith('artifact.')) return 'artifact';
+  if (e.event === 'gate.eval' || e.event === 'gate.start' || e.event === 'check.run' ||
+      e.event === 'smoke.boot' || e.event === 'smoke.ready' || e.event === 'smoke.shutdown' || e.event === 'smoke.skip') return 'gate';
+  return 'business';
+}
+
+function renderEventRow(e, idx) {
+  const r = renderEvent(e);
+  const critical = isCritical(e);
+  const cat = categorize(e);
+  return `
+    <div class="event ${critical ? 'critical' : ''}" data-idx="${idx}" data-cat="${cat}" onclick="togglePayload(${idx})">
+      <span class="event-ts">${fmtTs(e.ts)}</span>
+      <span class="event-phase badge badge-${phaseColor(e.phase)}">${e.phase || '—'}</span>
+      <span class="event-title"><span class="event-icon ${r.cls}">${r.icon}</span> ${r.title}</span>
+      <span class="dim">${e.actor ? e.actor.split(':')[1]?.split('@')[0] || '' : ''}</span>
+    </div>
+    <div class="event-payload" id="payload-${idx}">
+      ${Object.entries(e.data || {}).map(([k, v]) =>
+        `<div class="event-payload-row"><span class="event-payload-key">${k}:</span><span class="event-payload-val">${formatPayloadValue(v)}</span></div>`
+      ).join('') || '<span class="dim">(no payload)</span>'}
+    </div>
+  `;
+}
+
+function formatPayloadValue(v) {
+  if (v === null || v === undefined) return '<span class="dim">null</span>';
+  if (typeof v === 'object') return JSON.stringify(v, null, 2);
+  return String(v);
+}
+
+function phaseColor(p) {
+  const m = { 'SPEC':'purple','PLAN':'blue','IMPLEMENT':'blue','VERIFY':'yellow','SMOKE':'yellow','OBSERVE':'green','ARCHIVE':'gray' };
+  return m[p] || 'gray';
+}
+
+window.togglePayload = function(idx) {
+  const el = document.getElementById(`payload-${idx}`);
+  if (el) el.classList.toggle('open');
+};
+
+function setupFilters(allEvents) {
+  const flt = {
+    artifact: document.getElementById('flt-artifact'),
+    business: document.getElementById('flt-business'),
+    gate: document.getElementById('flt-gate'),
+  };
+  const apply = () => {
+    const a = flt.artifact.checked, b = flt.business.checked, g = flt.gate.checked;
+    document.querySelectorAll('.event').forEach(el => {
+      const c = el.dataset.cat;
+      const show = (c === 'artifact' && a) || (c === 'business' && b) || (c === 'gate' && g);
+      el.style.display = show ? '' : 'none';
+      const pl = document.getElementById(`payload-${el.dataset.idx}`);
+      if (pl && !show) pl.classList.remove('open');
+    });
+  };
+  Object.values(flt).forEach(cb => cb.addEventListener('change', apply));
+}
+
+async function main() {
+  const idx = await loadIndex();
+  const change = idx.changes.find(c => c.id === changeId);
+  if (!change) {
+    document.getElementById('change-title').textContent = `${changeId} (not found)`;
+    return;
+  }
+
+  document.getElementById('change-title').textContent = changeId;
+  document.getElementById('brand-meta').textContent = `/ ${changeId}`;
+
+  const events = await loadEvents(change.trace_path);
+  if (events.length === 0) {
+    document.getElementById('change-sub').textContent = 'events.jsonl 为空或不存在';
+    return;
+  }
+
+  const agg = aggregateChange(events);
+  document.getElementById('change-sub').textContent = `${agg.total_events} events · stage ${agg.stage}`;
+  document.getElementById('info-grid').innerHTML = renderInfoCards(agg);
+  document.getElementById('stage-row').innerHTML = renderStagePipeline(agg);
+  document.getElementById('event-count').textContent = `(${events.length})`;
+
+  // 事件列表（最新在上）
+  const reversed = [...events].reverse();
+  const html = reversed.map((e, i) => renderEventRow(e, i)).join('');
+  document.getElementById('events').innerHTML = html;
+
+  setupFilters(events);
+
+  // 自动滚到首个关键事件
+  const firstCritIdx = reversed.findIndex(isCritical);
+  if (firstCritIdx >= 0) {
+    setTimeout(() => {
+      const el = document.querySelector(`.event[data-idx="${firstCritIdx}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+  }
+}
+
+main();
+</script>
+
+</body>
+</html>
