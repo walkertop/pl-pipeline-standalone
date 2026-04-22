@@ -1,7 +1,9 @@
 ---
+id: sqlalchemy-async
 name: sqlalchemy-async
 triggers: ["sqlalchemy", "async session", "asyncpg", "alembic"]
 description: SQLAlchemy 2.x 异步会话与事务模式
+version: 1.0.0
 ---
 
 # SQLAlchemy 2.x 异步模式

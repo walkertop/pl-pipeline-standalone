@@ -1,7 +1,9 @@
 ---
+id: nextjs-performance
 name: nextjs-performance
 triggers: ["perf", "web vitals", "lcp", "bundle size", "lighthouse"]
 description: Next.js Web Vitals 优化与 Bundle 瘦身实战手册
+version: 1.0.0
 ---
 
 # Next.js 性能优化手册

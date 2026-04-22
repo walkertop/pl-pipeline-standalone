@@ -1,3 +1,9 @@
+---
+id: nextjs-conventions
+version: 1.0.0
+frontmatter_added_by: backfill-v1.3
+---
+
 # Rule: Next.js Conventions
 
 > **Scope**: always

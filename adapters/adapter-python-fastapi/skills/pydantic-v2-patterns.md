@@ -1,7 +1,9 @@
 ---
+id: pydantic-v2-patterns
 name: pydantic-v2-patterns
 triggers: ["pydantic", "basemodel", "validator", "field_validator", "model_config"]
 description: Pydantic v2 数据建模、校验、序列化完整参考
+version: 1.0.0
 ---
 
 # Pydantic v2 模式

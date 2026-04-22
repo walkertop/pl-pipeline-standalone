@@ -1,7 +1,9 @@
 ---
+id: nextjs-data-fetching
 name: nextjs-data-fetching
 triggers: ["fetch", "server action", "revalidate", "cache tag", "use cache"]
 description: 数据获取、缓存失效与 Server Actions 完整手册
+version: 1.0.0
 ---
 
 # 数据获取、缓存与 Server Actions

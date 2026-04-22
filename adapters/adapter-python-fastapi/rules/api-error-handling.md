@@ -1,3 +1,9 @@
+---
+id: api-error-handling
+version: 1.0.0
+frontmatter_added_by: backfill-v1.3
+---
+
 # Rule: API 错误处理
 
 > **Scope**: on-demand（设计/审查错误相关代码时加载）

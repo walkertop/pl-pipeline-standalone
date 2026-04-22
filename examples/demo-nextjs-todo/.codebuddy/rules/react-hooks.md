@@ -1,3 +1,9 @@
+---
+id: react-hooks
+version: 1.0.0
+frontmatter_added_by: backfill-v1.3
+---
+
 # Rule: React Hooks 使用规范
 
 > **Scope**: on-demand（涉及 hooks 时加载）

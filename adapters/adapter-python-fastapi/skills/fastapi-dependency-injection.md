@@ -1,7 +1,9 @@
 ---
+id: fastapi-dependency-injection
 name: fastapi-dependency-injection
 triggers: ["depends", "dependency", "di", "fastapi depends"]
 description: FastAPI Depends 依赖注入模式完整参考
+version: 1.0.0
 ---
 
 # FastAPI Depends 依赖注入

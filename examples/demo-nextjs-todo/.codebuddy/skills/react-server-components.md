@@ -1,7 +1,9 @@
 ---
+id: react-server-components
 name: react-server-components
 triggers: ["rsc", "server component", "use server", "use client"]
 description: React Server Components 使用指南 —— 何时 RSC/Client，如何传 props，常见坑位
+version: 1.0.0
 ---
 
 # React Server Components (RSC) 使用指南

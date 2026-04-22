@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pl-pipeline.dev/schemas/event-v1.3.json",
+  "title": "pl-pipeline Event Envelope v1.3",
+  "description": "统一事件信封（v1.3）。所有 pl-* / piao-* / observe-* 脚本写入 events.jsonl 时必须遵循此结构。",
+  "type": "object",
+  "required": ["ts", "trace_id", "change_id", "phase", "actor", "event"],
+  "properties": {
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "事件时间戳 ISO 8601 UTC。"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+_[0-9]{8}_[0-9]{6}$",
+      "description": "一次脚本/命令调用的唯一标识。相当于 command_id。同一次脚本调用产生的事件共用同一个 trace_id。"
+    },
+    "change_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "业务变更 id，对应 pl/changes/<change_id>/ 目录名。一个 change 内多次脚本调用共享 change_id 但 trace_id 不同。"
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["SPEC", "PLAN", "IMPLEMENT", "VERIFY", "SMOKE", "OBSERVE", "ARCHIVE"],
+      "description": "事件发生时所处的流水线阶段。"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "可选。同一 trace_id 下的单调递增序号。当毫秒级时间戳不够精确时用来排序。"
+    },
+    "actor": {
+      "type": "string",
+      "pattern": "^(agent|script|fs-watcher|git-hook|ide-hook|llm-selfreport):[a-zA-Z0-9._-]+(@[0-9]+\\.[0-9]+\\.[0-9]+)?$",
+      "description": "事件产生者。格式：<kind>:<name>[@<semver>]。例：agent:planner-nextjs-architect@3.1.0 / script:pl-runner / fs-watcher:observe-fs"
+    },
+    "event": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*(\\.[a-z][a-z_]*)+$",
+      "description": "事件类型名。使用点分层级：大类.动作。例：gate.eval / artifact.modified / plan.task.added / piao.contract_drift.detected"
+    },
+    "data": {
+      "type": "object",
+      "description": "事件 payload。结构由具体 event 决定，不做 schema 强制约束（允许演化）。下面的属性是约定俗成的字段名。",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "pattern": "^T[0-9]+[a-z]?$",
+          "description": "可选。如果事件与 taskdag 里的某任务关联，填此字段。"
+        },
+        "rule_id": {
+          "type": "string",
+          "description": "可选。如果事件是 rule 触发的，填 rule frontmatter 的 id。"
+        },
+        "path": {
+          "type": "string",
+          "description": "可选。如果事件涉及文件，填文件路径（相对项目根）。"
+        },
+        "sha256_before": { "type": ["string", "null"] },
+        "sha256_after":  { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "links": {
+      "type": "object",
+      "description": "可选。事件之间的因果关联。",
+      "properties": {
+        "caused_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "上游触发事件的 seq 或 trace_id 列表。"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

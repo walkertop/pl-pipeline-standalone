@@ -21,6 +21,7 @@ message: |
   Map / DB / globalThis / ORM 等非 fetch 调用，revalidateTag 不会触发 RSC 重渲染，
   UI 不会更新（retro-v2 B3 的真实 bug）。
 fix_hint: 改用 revalidatePath('/your/path') 或保留 fetch + cache tag 的经典范式
+version: 1.0.0
 ---
 
 # Rule: `revalidateTag` 仅用于 fetch 数据源

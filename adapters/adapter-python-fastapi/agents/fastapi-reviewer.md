@@ -1,7 +1,9 @@
 ---
+id: fastapi-reviewer
 name: fastapi-reviewer
 description: FastAPI 代码审查员。在 VERIFY 阶段对变更代码做类型 / 安全 / 性能 / OpenAPI 契约四维审查，产出 blocking/non-blocking 问题清单。
 ide_support: [codebuddy, cursor, claude-code]
+version: 1.0.0
 ---
 
 # FastAPI 代码审查员
