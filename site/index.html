@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pl-pipeline · 让 AI 编码从纸面契约走向可执行契约</title>
+  <meta name="description" content="pl-pipeline 三层架构（piao-kernel / pl-core / adapters）+ 6 阶段 7 门禁的通用 AI 研发流水线。" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ========== 顶部导航 ========== -->
+<header class="nav">
+  <div class="nav-inner">
+    <a href="#top" class="brand">
+      <span class="brand-mark">pl</span>
+      <span class="brand-text">pipeline</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#problem">问题</a>
+      <a href="#architecture">架构</a>
+      <a href="#pipeline">流水线</a>
+      <a href="#contract">可执行契约</a>
+      <a href="#flywheel">自我演化</a>
+      <a href="#start">上手</a>
+    </nav>
+    <div class="nav-right">
+      <a href="https://github.com/walkertop/pl-pipeline-standalone" target="_blank" rel="noreferrer" class="github-btn" title="GitHub">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.69-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.71 0-1.26.45-2.29 1.19-3.09-.12-.29-.51-1.47.11-3.06 0 0 .97-.31 3.18 1.18a11.07 11.07 0 0 1 5.8 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.59.23 2.77.11 3.06.74.8 1.19 1.83 1.19 3.09 0 4.44-2.69 5.41-5.26 5.7.41.35.78 1.04.78 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56C20.22 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+      </a>
+      <button class="theme-toggle" id="themeToggle" title="切换主题" aria-label="切换主题">
+        <span class="theme-icon">☾</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ========== Hero ========== -->
+<section id="top" class="hero">
+  <div class="hero-bg"></div>
+  <div class="container">
+    <div class="hero-badge">v1.1.1-alpha · 2026-04</div>
+    <h1 class="hero-title">
+      让 AI 编码<br/>
+      从<span class="strike">纸面契约</span>走向<span class="highlight">可执行契约</span>
+    </h1>
+    <p class="hero-sub">
+      pl-pipeline 是一套<b>通用、语言无关、IDE 无关</b>的 AI 研发流水线框架。
+      用三层架构（piao / pl / adapter）把"需求→实现→验证→归档"的全链路做成
+      <b>机器可执行的 DSL</b>，让每一个 gate 都有可追溯的 trace 事件。
+    </p>
+    <div class="hero-cta">
+      <a href="#architecture" class="btn btn-primary">看核心设计 ↓</a>
+      <a href="https://github.com/walkertop/pl-pipeline-standalone" target="_blank" rel="noreferrer" class="btn btn-ghost">GitHub →</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-num">3</div>
+        <div class="stat-label">层架构</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">6</div>
+        <div class="stat-label">阶段 + 7 门禁</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">2</div>
+        <div class="stat-label">reference adapter</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">0</div>
+        <div class="stat-label">宿主栈耦合</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 问题陈述 ========== -->
+<section id="problem" class="section">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-kicker">为什么做这件事</div>
+      <h2 class="section-title">AI 编码时代的三个致命痛点</h2>
+    </div>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="problem-num">01</div>
+        <h3>门禁是散文，不是判据</h3>
+        <p>
+          "编译通过 + lint 通过 + 单测通过" —— 每句话都对，但<b>没有脚本真的在判定</b>。
+          人类说"过了"它就过了。AI 说"过了"它也过了。<b>gate.eval 是口头承诺</b>。
+        </p>
+        <div class="problem-quote">"看起来绿色的流水线，真跑 demo 才发现 7 个 bug。"</div>
+      </div>
+
+      <div class="problem-card">
+        <div class="problem-num">02</div>
+        <h3>验证只到编译，不到启动</h3>
+        <p>
+          静态检查再全，也抓不到"装上依赖启动 500"、"module state 被 HMR 清空"、
+          "passlib × bcrypt 5.x 坏组合"这类<b>只有真启动才能暴露</b>的问题。
+        </p>
+        <div class="problem-quote">VERIFY 只管静态，OBSERVE 只管线上，<b>中间缺 cold-start smoke</b>。</div>
+      </div>
+
+      <div class="problem-card">
+        <div class="problem-num">03</div>
+        <h3>规则是 AI prompt，不是 linter</h3>
+        <p>
+          "revalidateTag 对 module-state 数据源无效" —— 这条知识在 skill
+          里写得清清楚楚，但没有<b>任何脚本在 CI 扫代码</b>看谁违反。
+          知识只服务 AI 生成，不服务 CI 验收。
+        </p>
+        <div class="problem-quote">一个漏网 bug 只会被人工修一次，<b>下次还会再犯</b>。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 三层架构 ========== -->
+<section id="architecture" class="section section-alt">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-kicker">核心架构</div>
+      <h2 class="section-title">三层分工 · 职责清晰 · 互不侵蚀</h2>
+      <p class="section-lead">
+        <b>piao-kernel</b> 管"事实归档（语义底座）"、<b>pl-core</b> 管"流水线执行"、
+        <b>adapters</b> 管"场景填充"。每一层只暴露契约，内部实现可独立演化。
+      </p>
+    </div>
+
+    <div class="layers">
+
+      <div class="layer layer-3">
+        <div class="layer-head">
+          <div class="layer-tag">Layer 3</div>
+          <div class="layer-name">Adapter</div>
+          <div class="layer-sub">场景特定 · 可插拔</div>
+        </div>
+        <div class="layer-body">
+          <p>按技术栈打包"最佳实践"，一键注入宿主项目。</p>
+          <div class="chip-row">
+            <span class="chip">templates</span>
+            <span class="chip">agents</span>
+            <span class="chip">skills</span>
+            <span class="chip">rules</span>
+            <span class="chip">scripts</span>
+            <span class="chip">contract</span>
+            <span class="chip">smoke</span>
+          </div>
+          <div class="layer-examples">
+            <code>adapter-nextjs-web</code>
+            <code>adapter-python-fastapi</code>
+            <code>adapter-...</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-arrow">依赖 ↓</div>
+
+      <div class="layer layer-2">
+        <div class="layer-head">
+          <div class="layer-tag">Layer 2</div>
+          <div class="layer-name">pl-core</div>
+          <div class="layer-sub">执行层 DSL · 场景无关</div>
+        </div>
+        <div class="layer-body">
+          <p>定义"做需求"的通用流水线：阶段 / 门禁 / 产物 / 命令。</p>
+          <div class="chip-row">
+            <span class="chip">6 阶段</span>
+            <span class="chip">7 门禁</span>
+            <span class="chip">7 产物</span>
+            <span class="chip">9 命令</span>
+            <span class="chip">pl-runner</span>
+            <span class="chip">pl-smoke</span>
+          </div>
+          <div class="layer-examples">
+            <code>scripts/pl-runner.sh</code>
+            <code>scripts/pl-smoke.sh</code>
+            <code>scripts/pipeline-orchestrator.sh</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-arrow">依赖 ↓</div>
+
+      <div class="layer layer-1">
+        <div class="layer-head">
+          <div class="layer-tag">Layer 1</div>
+          <div class="layer-name">piao-kernel</div>
+          <div class="layer-sub">语义底座 · 不知道有 pipeline</div>
+        </div>
+        <div class="layer-body">
+          <p>把"产物身份 / 事件 / 快照 / 漂移 / 演化"做成稳定底座。</p>
+          <div class="chip-row">
+            <span class="chip">URN 身份</span>
+            <span class="chip">Artifact</span>
+            <span class="chip">分层事件</span>
+            <span class="chip">Snapshot</span>
+            <span class="chip">Drift</span>
+            <span class="chip">Evolution</span>
+          </div>
+          <div class="layer-examples">
+            <code>piao-snapshot-produce.sh</code>
+            <code>piao-drift-compute.sh</code>
+            <code>piao-contract-drift-compute.sh</code>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="callout callout-tip">
+      <div class="callout-icon">💡</div>
+      <div>
+        <div class="callout-title">分层判断标准</div>
+        <p>
+          一个能力<b>如果所有 adapter 都要各造一遍</b>，它就属于 pl / piao 本体，
+          不能塞给 adapter。—— 这条判断标准来自 2026-04 retro v2 的事后复盘。
+        </p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========== 流水线：6 阶段 + 7 门禁 ========== -->
+<section id="pipeline" class="section">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-kicker">主流程</div>
+      <h2 class="section-title">6 阶段 × 7 门禁 × 全程 trace</h2>
+      <p class="section-lead">
+        从需求到归档的全链路 DSL。点任一阶段查看门禁判据和产物清单。
+      </p>
+    </div>
+
+    <div class="stepper" id="stepper">
+      <div class="step" data-stage="SPEC">
+        <div class="step-circle">📝</div>
+        <div class="step-name">SPEC</div>
+      </div>
+      <div class="step-gate" data-gate="A0">A0</div>
+
+      <div class="step" data-stage="PLAN">
+        <div class="step-circle">🗂</div>
+        <div class="step-name">PLAN</div>
+      </div>
+      <div class="step-gate" data-gate="B1">B1</div>
+
+      <div class="step" data-stage="IMPLEMENT">
+        <div class="step-circle">💻</div>
+        <div class="step-name">IMPLEMENT</div>
+      </div>
+      <div class="step-gate" data-gate="D">D</div>
+
+      <div class="step step-highlight" data-stage="VERIFY">
+        <div class="step-circle">🔍</div>
+        <div class="step-name">VERIFY</div>
+      </div>
+      <div class="step-gate" data-gate="E_smoke">E<sub>smoke</sub></div>
+
+      <div class="step step-highlight" data-stage="SMOKE">
+        <div class="step-circle">🔥</div>
+        <div class="step-name">SMOKE</div>
+        <div class="step-badge">v1.1 新增</div>
+      </div>
+      <div class="step-gate" data-gate="E">E</div>
+
+      <div class="step" data-stage="OBSERVE">
+        <div class="step-circle">📡</div>
+        <div class="step-name">OBSERVE</div>
+      </div>
+      <div class="step-gate" data-gate="G">G</div>
+
+      <div class="step" data-stage="ARCHIVE">
+        <div class="step-circle">📦</div>
+        <div class="step-name">ARCHIVE</div>
+      </div>
+    </div>
+
+    <div class="stage-detail" id="stageDetail">
+      <!-- 由 JS 注入 -->
+    </div>
+
+    <!-- Trace 事件流示例 -->
+    <div class="trace-preview">
+      <div class="trace-head">
+        <span class="trace-dot"></span>
+        真实 trace 事件（一条 <code>.events.jsonl</code> 里的 piao + pl 合流）
+      </div>
+<pre class="trace-body"><code class="language-json">{"phase":"IMPLEMENT","event":"gate.start","data":{"gate":"D"}}
+{"phase":"IMPLEMENT","event":"check.run","data":{"checker":"compile_check","status":"pass"}}
+{"phase":"IMPLEMENT","event":"check.run","data":{"checker":"lint","status":"fail"}}
+{"phase":"IMPLEMENT","event":"gate.eval","data":{"gate":"D","result":"blocked","pass":1,"fail":1}}
+{"phase":"SMOKE","event":"smoke.boot","data":{"pid":6930,"cmd":"uvicorn app.main:app..."}}
+{"phase":"SMOKE","event":"smoke.ready","data":{"attempts":2}}
+{"phase":"SMOKE","event":"check.run","data":{"checker":"probe:register_happy","status_code":201,"status":"pass"}}
+{"phase":"SMOKE","event":"gate.eval","data":{"gate":"E_smoke","result":"passed"}}
+{"phase":"OBSERVE","event":"piao.contract_drift.detected","data":{"counts":{"total":0,"error":0}}}</code></pre>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========== 纸面契约 vs 可执行契约 ========== -->
+<section id="contract" class="section section-alt">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-kicker">关键突破</div>
+      <h2 class="section-title">纸面契约 → 可执行契约</h2>
+      <p class="section-lead">
+        所有 AI 编码工具的隐秘弱点：<b>评估判据不是机器可执行的</b>。
+        v1.1 把它修了。
+      </p>
+    </div>
+
+    <div class="versus">
+
+      <div class="versus-col versus-before">
+        <div class="versus-tag">Before · v1.0</div>
+        <h3>纸面门禁</h3>
+<pre><code class="language-yaml">gates:
+  D:
+    criteria:
+      - "lint PASS"
+      - "compile PASS（./gradlew build）"
+      - "网络层自检 PASS"
+      - "解析层自检 PASS"</code></pre>
+        <ul class="versus-points">
+          <li><b>散文判据</b>，没有脚本真的求值</li>
+          <li><b>硬编码宿主栈</b>（gradle / ApiSelfCheck）</li>
+          <li><code>gate.eval</code> 和 <code>check.run</code> 无闭环</li>
+          <li>lint 失败，gate 仍可写 <code>passed</code></li>
+        </ul>
+      </div>
+
+      <div class="versus-col versus-after">
+        <div class="versus-tag versus-tag-ok">After · v1.1</div>
+        <h3>可执行契约</h3>
+<pre><code class="language-yaml">gates:
+  D:
+    checks: [compile_check, lint, test]
+    eval: "all_checks.pass"
+    on_failure: block
+
+checks:
+  compile_check:
+    cmd: "$PL_BUILD_CHECK_CMD"
+    timeout_sec: 180
+  lint: { cmd: "$PL_LINT_CMD" }
+  test: { cmd: "$PL_TEST_CMD" }</code></pre>
+        <ul class="versus-points">
+          <li><b>结构化判据</b>，<code>pl-runner.sh</code> 机器求值</li>
+          <li><b>adapter 注入命令</b>，pl-core 零耦合</li>
+          <li><code>gate.eval</code> 自动派生自 <code>check.run</code></li>
+          <li>lint 失败 → gate <b>真的</b> blocked</li>
+        </ul>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+<!-- ========== 自我演化飞轮 ========== -->
+<section id="flywheel" class="section">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-kicker">真实案例</div>
+      <h2 class="section-title">pl-pipeline 自我演化飞轮</h2>
+      <p class="section-lead">
+        v1.1 的所有能力增强，都不是事先规划出来的 —— 而是在<b>自己用自己</b>的过程中跑出来的。
+      </p>
+    </div>
+
+    <div class="flywheel">
+      <div class="fw-step">
+        <div class="fw-num">1</div>
+        <div class="fw-title">纸面 demo 全绿</div>
+        <div class="fw-desc">两个 reference adapter 都通过 schema/validate，文档显示 "ARCHIVE 11/11"。</div>
+      </div>
+      <div class="fw-arrow">↓</div>
+      <div class="fw-step fw-step-red">
+        <div class="fw-num">2</div>
+        <div class="fw-title">真跑暴露 7 个 bug</div>
+        <div class="fw-desc">
+          <code>npm run dev</code>、<code>uvicorn</code> 启起来 → 类型错、依赖缺、
+          HMR 吃状态、passlib × bcrypt 5.x 坏组合 ...
+        </div>
+      </div>
+      <div class="fw-arrow">↓</div>
+      <div class="fw-step">
+        <div class="fw-num">3</div>
+        <div class="fw-title">retro v1：归咎 adapter</div>
+        <div class="fw-desc">开了 6 个方案，4 个都是"让 adapter 多声明字段"。——被用户一句点破：<b>不要被 adapter 困住</b>。</div>
+      </div>
+      <div class="fw-arrow">↓</div>
+      <div class="fw-step fw-step-green">
+        <div class="fw-num">4</div>
+        <div class="fw-title">retro v2：回到本体视角</div>
+        <div class="fw-desc">
+          4 条本体缺陷：E1 可执行契约层 / E2 SMOKE 阶段 / E3 rule-as-code / E4 契约-现实漂移。
+          <b>判断标准</b>：能力如果所有 adapter 都要各做一遍，它属于 pl/piao 本体。
+        </div>
+      </div>
+      <div class="fw-arrow">↓</div>
+      <div class="fw-step fw-step-ok">
+        <div class="fw-num">5</div>
+        <div class="fw-title">v1.1 落地 3/4</div>
+        <div class="fw-desc">
+          E1 + E2 + orchestrator 解耦（<code>pl-v1.1.0-alpha</code>）· E4 contract-drift（<code>pl-v1.1.1-alpha</code>）。
+          剩 E3 待 v0.3。
+        </div>
+      </div>
+      <div class="fw-arrow">↓</div>
+      <div class="fw-step fw-step-proof">
+        <div class="fw-num">6</div>
+        <div class="fw-title">反证实验闭环</div>
+        <div class="fw-desc">
+          回滚 Next.js demo 到 retro-v1 修之前 → 新的 <code>piao-contract-drift</code>
+          当场抓到 <b>6 个 error</b>，覆盖 B1/B4/B6/B7 四个原始 bug。<b>能力真的在了</b>。
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-icon">🎯</div>
+      <div>
+        <div class="callout-title">元洞见</div>
+        <p>
+          真正的"做了一次 → 系统变强"飞轮，不靠计划，靠 <b>adversarial test</b>：
+          用流水线做真事情，发现漏洞归因到本体缺陷，把修补变成通用契约，下次自动受益。
+        </p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========== 上手 ========== -->
+<section id="start" class="section section-alt">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-kicker">30 秒上手</div>
+      <h2 class="section-title">把 pl-pipeline 装进你的项目</h2>
+    </div>
+
+    <div class="start-grid">
+      <div class="start-card">
+        <div class="start-step">1</div>
+        <h4>克隆独立仓</h4>
+<pre><code class="language-bash">git clone https://github.com/walkertop/pl-pipeline-standalone.git
+export PL_HOME=$PWD/pl-pipeline-standalone</code></pre>
+      </div>
+
+      <div class="start-card">
+        <div class="start-step">2</div>
+        <h4>装 adapter 到你的项目</h4>
+<pre><code class="language-bash">cd ~/your-nextjs-project
+bash $PL_HOME/scripts/adapter-install.sh \
+     $PL_HOME/adapters/adapter-nextjs-web .</code></pre>
+      </div>
+
+      <div class="start-card">
+        <div class="start-step">3</div>
+        <h4>创建第一个 change</h4>
+<pre><code class="language-bash"># 把 pl-core 的 config 拷过来
+cp $PL_HOME/assets/pl/config.default.yaml pl/config.yaml
+
+# 手动 or AI 生成 5 件产物
+mkdir -p pl/changes/my-first-feature
+# spec.md / plan.md / taskdag.md / api.md / .state.md</code></pre>
+      </div>
+
+      <div class="start-card">
+        <div class="start-step">4</div>
+        <h4>跑 D 门禁 + SMOKE + drift</h4>
+<pre><code class="language-bash">PL_PROJECT=$PWD bash $PL_HOME/scripts/pl-runner.sh \
+  --change my-first-feature --gate D
+
+PL_PROJECT=$PWD bash $PL_HOME/scripts/pl-smoke.sh \
+  --change my-first-feature
+
+PL_PROJECT=$PWD bash $PL_HOME/scripts/piao-contract-drift-compute.sh \
+  --change my-first-feature</code></pre>
+      </div>
+    </div>
+
+    <div class="links">
+      <a href="https://github.com/walkertop/pl-pipeline-standalone#readme" target="_blank" rel="noreferrer" class="link-card">
+        <div class="link-title">📖 README</div>
+        <div class="link-sub">完整的背景、架构、命令参考</div>
+      </a>
+      <a href="https://github.com/walkertop/pl-pipeline-standalone/blob/main/ROADMAP.md" target="_blank" rel="noreferrer" class="link-card">
+        <div class="link-title">🗺 Roadmap</div>
+        <div class="link-sub">v0.2 / v0.3 / v1.0 路线图</div>
+      </a>
+      <a href="https://github.com/walkertop/pl-pipeline-standalone/blob/main/docs/retros/2026-04-demo-first-run-retro-v2.md" target="_blank" rel="noreferrer" class="link-card">
+        <div class="link-title">📝 Retro v2</div>
+        <div class="link-sub">v1.1 增强的完整归因 + 反证实验</div>
+      </a>
+      <a href="https://github.com/walkertop/pl-pipeline-standalone/tree/main/examples" target="_blank" rel="noreferrer" class="link-card">
+        <div class="link-title">🎁 两个端到端 demo</div>
+        <div class="link-sub">demo-nextjs-todo / demo-fastapi-users</div>
+      </a>
+    </div>
+
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-row">
+      <div>
+        pl-pipeline ·
+        Apache 2.0 ·
+        Made by <a href="https://github.com/walkertop" target="_blank" rel="noreferrer">walker</a>
+      </div>
+      <div class="footer-version">v1.1.1-alpha · 2026-04</div>
+    </div>
+  </div>
+</footer>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
