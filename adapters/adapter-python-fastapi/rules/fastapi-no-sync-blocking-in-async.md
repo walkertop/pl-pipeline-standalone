@@ -21,6 +21,7 @@ message: |
   这会阻塞整个事件循环 —— 不只是当前协程，整个 FastAPI worker 都会卡住，
   吞掉异步框架的核心收益。
 fix_hint: 用 asyncio.sleep() / httpx.AsyncClient / aiofiles 替代；必要时用 asyncio.to_thread() 封装 CPU bound
+version: 1.0.0
 ---
 
 # Rule: async 代码不要用同步阻塞调用

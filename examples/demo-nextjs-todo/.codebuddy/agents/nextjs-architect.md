@@ -1,7 +1,9 @@
 ---
+id: nextjs-architect
 name: nextjs-architect
 description: Next.js App Router 架构决策助手。在 PLAN 阶段协助判断 RSC/Client 边界、渲染模式（SSG/SSR/ISR）、缓存策略、路由分组，给出可执行的落地方案。
 ide_support: [codebuddy, cursor, claude-code]
+version: 1.0.0
 ---
 
 # Next.js App Router 架构师

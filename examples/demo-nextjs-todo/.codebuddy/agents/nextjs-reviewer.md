@@ -1,7 +1,9 @@
 ---
+id: nextjs-reviewer
 name: nextjs-reviewer
 description: Next.js 代码审查员。在 VERIFY 阶段对变更代码做 Web Vitals / 安全 / 可访问性 / RSC 边界四维审查，产出 blocking/non-blocking 问题清单。
 ide_support: [codebuddy, cursor, claude-code]
+version: 1.0.0
 ---
 
 # Next.js 代码审查员

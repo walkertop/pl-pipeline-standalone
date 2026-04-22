@@ -1,7 +1,9 @@
 ---
+id: pytest-async
 name: pytest-async
 triggers: ["pytest", "pytest-asyncio", "httpx", "test client", "asgi"]
 description: pytest + httpx 异步测试完整模式
+version: 1.0.0
 ---
 
 # pytest + httpx 异步测试

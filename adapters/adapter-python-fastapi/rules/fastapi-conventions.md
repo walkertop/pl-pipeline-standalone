@@ -1,3 +1,9 @@
+---
+id: fastapi-conventions
+version: 1.0.0
+frontmatter_added_by: backfill-v1.3
+---
+
 # Rule: FastAPI Conventions
 
 > **Scope**: always

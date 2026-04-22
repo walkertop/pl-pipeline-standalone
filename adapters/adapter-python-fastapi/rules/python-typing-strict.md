@@ -1,3 +1,9 @@
+---
+id: python-typing-strict
+version: 1.0.0
+frontmatter_added_by: backfill-v1.3
+---
+
 # Rule: Python 类型注解强制
 
 > **Scope**: always

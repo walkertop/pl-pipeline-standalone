@@ -1,3 +1,9 @@
+---
+id: typescript-strict
+version: 1.0.0
+frontmatter_added_by: backfill-v1.3
+---
+
 # Rule: TypeScript Strict Mode
 
 > **Scope**: always

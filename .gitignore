@@ -116,3 +116,7 @@ examples/*/.ruff_cache/
 # ---- Skills / Presets local dev override ----
 .codebuddy/commands.local/
 presets/*/local-test/
+
+# v1.3 dashboard runtime
+dashboard/_data.json
+dashboard/trace

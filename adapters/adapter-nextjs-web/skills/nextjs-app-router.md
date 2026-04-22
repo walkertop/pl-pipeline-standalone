@@ -1,7 +1,9 @@
 ---
+id: nextjs-app-router
 name: nextjs-app-router
 triggers: ["app router", "layout.tsx", "route group", "parallel route", "intercepting route"]
 description: Next.js App Router 路由/布局/并行路由/拦截路由完整参考
+version: 1.0.0
 ---
 
 # Next.js App Router 路由模式

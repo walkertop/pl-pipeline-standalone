@@ -6,8 +6,8 @@ adapter:
   id: nextjs-web
   version: 0.1.0
   name: "Next.js Web 项目全家桶"
-  installed_at: "2026-04-22T03:54:37Z"
-  installed_from: "$PL_HOME/adapters/adapter-nextjs-web"
+  installed_at: "2026-04-22T11:29:35Z"
+  installed_from: "/Users/guobin/Developer/djc1/pl-pipeline-standalone/adapters/adapter-nextjs-web"
   source_sha256: "7c5255fbe53329ce21cfefaab5246659b9f8675969c6393eff19a96f17f70419"
 
 installed_files:

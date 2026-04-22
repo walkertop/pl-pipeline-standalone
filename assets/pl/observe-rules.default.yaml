@@ -1,0 +1,118 @@
+# =============================================================================
+# observe-rules.default.yaml — 业务语义推断规则（pl-observe 第二层）
+# =============================================================================
+#
+# 核心思路：
+#   Layer 1 (observe-fs.py)  只产 artifact.{created,modified,deleted}
+#   Layer 2 (本规则 + apply-rules.py)  把这些原始事件升级为业务语义事件
+#
+# 工作流程：
+#   1. apply-rules.py 读取 events.jsonl 找到所有 artifact.* 事件
+#   2. 对每条 artifact 事件，按 rules[] 逐条匹配
+#   3. 命中的 rule 触发 emit：写一条新的业务事件（如 plan.task.added）
+#   4. 同样的 trace_id，同样的信封 schema
+#
+# 规则语义：
+#   rules[].trigger    触发条件（事件类型 + path 匹配）
+#   rules[].extract    从文件 diff 里提取字段（regex 捕获）
+#   rules[].emit       要产出的新事件（event + data 模板）
+# =============================================================================
+
+version: "1.0"
+
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Rule 1: taskdag.md 里新增一行 | T0x | ... → plan.task.added
+  # ---------------------------------------------------------------------------
+  - id: taskdag-row-added
+    description: "监听 taskdag.md 新增任务行"
+    trigger:
+      event_in: [artifact.modified, artifact.created]
+      path_glob: "pl/changes/*/taskdag.md"
+    extract:
+      # 对比前后 sha，找"多出来"的行里匹配任务表格格式
+      diff_kind: added_lines
+      line_regex: '^\|\s*(T\d+[a-z]?)\s*\|\s*([^|]+)\s*\|'
+      captures:
+        task_id: 1
+        task_name: 2
+    emit:
+      event: plan.task.added
+      data_template:
+        task_id: "{task_id}"
+        task_name: "{task_name}"
+        source_path: "{path}"
+
+  # ---------------------------------------------------------------------------
+  # Rule 2: taskdag 行状态变化（🔶 IN_PROGRESS → ✅ DONE）→ task.done
+  # ---------------------------------------------------------------------------
+  - id: taskdag-task-done
+    description: "监听 taskdag.md 某任务状态变成 DONE"
+    trigger:
+      event_in: [artifact.modified]
+      path_glob: "pl/changes/*/taskdag.md"
+    extract:
+      diff_kind: modified_lines
+      # 匹配"新版包含 DONE 但旧版不包含"的行
+      line_regex_after:  '^\|\s*(T\d+[a-z]?)\s.*(?:✅|DONE)'
+      line_regex_before_not: '^\|\s*\1\s.*(?:✅|DONE)'
+      captures:
+        task_id: 1
+    emit:
+      event: task.done
+      data_template:
+        task_id: "{task_id}"
+        source_path: "{path}"
+
+  # ---------------------------------------------------------------------------
+  # Rule 3: .state.md 的 stage 字段变化 → state.transition
+  # ---------------------------------------------------------------------------
+  - id: state-stage-transition
+    description: "监听 .state.md 的 '- stage:' 行变化"
+    trigger:
+      event_in: [artifact.modified]
+      path_glob: "pl/changes/*/.state.md"
+    extract:
+      diff_kind: line_changed
+      line_regex_before: '^- stage:\s*(\w+)'
+      line_regex_after:  '^- stage:\s*(\w+)'
+      captures:
+        from_stage: "before.1"
+        to_stage:   "after.1"
+    emit:
+      event: state.transition
+      data_template:
+        from_stage: "{from_stage}"
+        to_stage:   "{to_stage}"
+        source_path: "{path}"
+
+  # ---------------------------------------------------------------------------
+  # Rule 4: .codebuddy/rules/*.md 新增 → asset.promoted（rule 飞轮）
+  # ---------------------------------------------------------------------------
+  - id: rule-asset-promoted
+    description: "监听 .codebuddy/rules/ 新增 rule 文件（ARCHIVE 阶段飞轮的证据）"
+    trigger:
+      event_in: [artifact.created]
+      path_glob: ".codebuddy/rules/*.md"
+    extract: {}
+    emit:
+      event: asset.promoted
+      data_template:
+        kind: rule
+        target_path: "{path}"
+
+  # ---------------------------------------------------------------------------
+  # Rule 5: .codebuddy/skills/*.md 新增 → asset.promoted
+  # ---------------------------------------------------------------------------
+  - id: skill-asset-promoted
+    description: "监听 .codebuddy/skills/ 新增 skill 文件"
+    trigger:
+      event_in: [artifact.created]
+      path_glob: ".codebuddy/skills/*.md"
+    extract: {}
+    emit:
+      event: asset.promoted
+      data_template:
+        kind: skill
+        target_path: "{path}"

@@ -17,6 +17,7 @@ message: |
   不是它的返回值。Depends(foo()) 会在 import 时就执行 foo()，依赖注入
   体系完全失效（尤其 yield-type dependency 的生命周期被短路）。
 fix_hint: 改成 Depends(foo)，FastAPI 会在每次请求进来时调用它
+version: 1.0.0
 ---
 
 # Rule: `Depends(foo)` 传可调用，不是 `Depends(foo())`

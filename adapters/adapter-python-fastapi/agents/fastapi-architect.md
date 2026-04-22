@@ -1,7 +1,9 @@
 ---
+id: fastapi-architect
 name: fastapi-architect
 description: FastAPI 后端架构决策助手。在 PLAN 阶段协助判断路由分组、依赖注入层次、事务边界、数据模型（ORM vs Pydantic 分离）、异步模式，给出可落地的分层方案。
 ide_support: [codebuddy, cursor, claude-code]
+version: 1.0.0
 ---
 
 # FastAPI 后端架构师
