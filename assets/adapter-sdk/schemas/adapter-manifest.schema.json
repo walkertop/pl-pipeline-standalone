@@ -382,6 +382,71 @@
           "pattern": "^urn:piao:[a-z_]+:pl:[a-z_][a-z0-9_-]*$"
         }
       }
+    },
+    "contract": {
+      "description": "Declarative contract consumed by piao-contract-drift-compute.sh (v1.1+). Describes what state the host project SHOULD be in, so the drift engine can diff it against the ACTUAL state and emit piao.contract_drift artifacts.",
+      "type": "object",
+      "properties": {
+        "expected_files": {
+          "description": "Files/directories that SHOULD exist. Missing files become drift entries with configurable severity.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string" },
+              "alt_paths": {
+                "description": "Alternative paths; if any of them exists, expected_file is considered satisfied.",
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["file", "dir"],
+                "default": "file"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["error", "warn", "info"],
+                "default": "warn"
+              },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "peer_versions": {
+          "description": "Semver constraints on host packages grouped by package manager namespace (npm, python, cargo, ...).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "known_bad_combos": {
+          "description": "Black-listed version combinations. If the host's actual state matches the 'when' block, a drift entry is emitted.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "when"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+              "when": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                }
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["error", "warn", "info"],
+                "default": "warn"
+              },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

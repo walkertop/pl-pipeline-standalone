@@ -116,6 +116,43 @@ requires:
   files:
     - pyproject.toml
 
+# v1.1 新增（retro-v2 E4）：给 piao-contract-drift-compute 消费的"声明侧契约"
+# 描述宿主项目**应该**满足的状态。drift 引擎会采集宿主实况做对比。
+contract:
+  expected_files:
+    - path: pyproject.toml
+      severity: error
+      note: "Python 项目元数据"
+    - path: app/main.py
+      severity: error
+      note: "FastAPI 入口"
+    - path: tests/
+      kind: dir
+      severity: warn
+      note: "最小测试目录，缺失可能导致 pytest 集成漏测"
+  peer_versions:
+    python:
+      python: ">=3.11"
+      fastapi: ">=0.110"
+      pydantic: ">=2.0"
+      sqlalchemy: ">=2.0"
+      # 关键点：显式要求 bcrypt 不高于 5.x 避开 passlib 坏 combo（本次 retro-v2 B7）
+      bcrypt: ">=4.0,<5.0"
+      uvicorn: ">=0.20"
+      # 这两个是"真跑 demo 才发现需要"的运行时依赖（retro-v2 B6）
+      python-multipart: ">=0.0.9"
+      email-validator: ">=2.0"
+  known_bad_combos:
+    - id: passlib-vs-bcrypt-5
+      when:
+        python:
+          passlib: "*"
+          bcrypt: ">=5.0"
+      severity: error
+      message: |
+        passlib 对 bcrypt>=5.x 有已知 AttributeError / 72 字节 bug。
+        本 adapter 推荐直接使用 bcrypt 库而非 passlib。
+
 piao_emit:
   on_stages: [VERIFY, ARCHIVE]
   urn_namespace: "urn:piao:artifact:pl:python-fastapi"

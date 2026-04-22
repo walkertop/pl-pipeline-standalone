@@ -99,6 +99,44 @@ requires:
   files:
     - package.json
 
+# v1.1 新增（retro-v2 E4）：piao-contract-drift-compute 消费的"声明侧契约"
+# 写入本 adapter 推广的 Next.js 项目应当具备的状态。
+contract:
+  expected_files:
+    - path: package.json
+      severity: error
+    - path: tsconfig.json
+      severity: error
+      note: "TS 严格模式依赖此文件（retro-v2 B4）"
+    - path: next.config.ts
+      alt_paths: ["next.config.js", "next.config.mjs"]
+      severity: warn
+      note: "缺失时 Next 会用默认配置，通常 OK"
+    - path: app/layout.tsx
+      alt_paths: ["app/layout.js", "pages/_app.tsx", "pages/_app.js"]
+      severity: error
+      note: "根布局 / 根组件（retro-v2 B4：缺它 next dev 直接报错）"
+  peer_versions:
+    npm:
+      next: ">=15.0.0"
+      react: ">=19.0.0"
+      react-dom: ">=19.0.0"
+      "@types/react": ">=19.0.0"
+      "@types/react-dom": ">=19.0.0"
+      typescript: ">=5.5"
+      zod: ">=3.23"
+  known_bad_combos:
+    - id: types-react-dom-18-with-useFormState
+      when:
+        npm:
+          "@types/react-dom": ">=18.0.0 <19.0.0"
+          react: ">=18.3.0 <19.0.0"
+      severity: error
+      message: |
+        React 18.3 的 useFormState / useFormStatus 在 @types/react-dom@18 里只
+        出现在 canary.d.ts，TS 严格模式下无法 import。请升级到 React 19 +
+        useActionState（retro-v2 B1）。
+
 piao_emit:
   on_stages: [VERIFY, ARCHIVE]
   urn_namespace: "urn:piao:artifact:pl:nextjs-web"
