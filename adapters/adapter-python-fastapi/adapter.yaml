@@ -65,6 +65,16 @@ provides:
       path: "rules/api-error-handling.md"
       scope: on-demand
       description: "API 错误分类、HTTP status 与 problem+json"
+    - id: fastapi-no-sync-blocking-in-async
+      path: "rules/fastapi-no-sync-blocking-in-async.md"
+      scope: always
+      description: "async 代码里禁止同步阻塞调用（retro-v2 E3 · 可执行 rule）"
+      executable: true
+    - id: fastapi-depends-pass-callable
+      path: "rules/fastapi-depends-pass-callable.md"
+      scope: always
+      description: "Depends(foo) 而不是 Depends(foo())（retro-v2 E3 · 可执行 rule）"
+      executable: true
   scripts:
     build: "scripts/build.sh"
     verify: "scripts/verify.sh"

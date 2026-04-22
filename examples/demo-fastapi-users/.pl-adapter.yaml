@@ -6,9 +6,9 @@ adapter:
   id: python-fastapi
   version: 0.1.0
   name: "Python FastAPI 后端全家桶"
-  installed_at: "2026-04-21T14:47:36Z"
+  installed_at: "2026-04-22T04:00:43Z"
   installed_from: "$PL_HOME/adapters/adapter-python-fastapi"
-  source_sha256: "55477e9e4e757f4bdef3b63d438b0969b821e156b80f9ff4f0917b266cc48214"
+  source_sha256: "e9e187095c984b19544c6491d4ce306647a46904abf8f2b9a1e68ec1ef32a2c6"
 
 installed_files:
   - pl/templates/spec.md
@@ -23,6 +23,8 @@ installed_files:
   - .codebuddy/rules/python-typing-strict.md
   - .codebuddy/rules/fastapi-conventions.md
   - .codebuddy/rules/api-error-handling.md
+  - .codebuddy/rules/fastapi-no-sync-blocking-in-async.md
+  - .codebuddy/rules/fastapi-depends-pass-callable.md
   - scripts/adapter-python-fastapi-build.sh
   - scripts/adapter-python-fastapi-verify.sh
   - scripts/adapter-python-fastapi-lint.sh

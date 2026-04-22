@@ -6,9 +6,9 @@ adapter:
   id: nextjs-web
   version: 0.1.0
   name: "Next.js Web 项目全家桶"
-  installed_at: "2026-04-21T14:43:50Z"
+  installed_at: "2026-04-22T03:54:37Z"
   installed_from: "$PL_HOME/adapters/adapter-nextjs-web"
-  source_sha256: "5ed72d835cf3ce2f77afce8604c07bd7338ff48ee54a4a3d4af301cb8b1e16fa"
+  source_sha256: "7c5255fbe53329ce21cfefaab5246659b9f8675969c6393eff19a96f17f70419"
 
 installed_files:
   - pl/templates/spec.md
@@ -23,6 +23,7 @@ installed_files:
   - .codebuddy/rules/typescript-strict.md
   - .codebuddy/rules/nextjs-conventions.md
   - .codebuddy/rules/react-hooks.md
+  - .codebuddy/rules/nextjs-revalidate-for-non-fetch.md
   - scripts/adapter-nextjs-web-build.sh
   - scripts/adapter-nextjs-web-verify.sh
   - scripts/adapter-nextjs-web-lint.sh

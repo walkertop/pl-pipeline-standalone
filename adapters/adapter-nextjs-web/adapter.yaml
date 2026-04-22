@@ -66,6 +66,11 @@ provides:
       path: "rules/react-hooks.md"
       scope: on-demand
       description: "React Hooks 使用规范（依赖数组、状态管理）"
+    - id: nextjs-revalidate-for-non-fetch
+      path: "rules/nextjs-revalidate-for-non-fetch.md"
+      scope: always
+      description: "revalidateTag 仅对 fetch 数据源生效（retro-v2 E3 · 可执行 rule）"
+      executable: true
   scripts:
     build: "scripts/build.sh"
     verify: "scripts/verify.sh"
