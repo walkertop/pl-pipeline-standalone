@@ -202,6 +202,70 @@ GET /_data/contracts.json   ← 新端点，3s TTL 缓存
 
 ---
 
+## Contract 下钻 — 看 violation 详情（v1.7.3+）
+
+v1.7.2 的角标只回答"红 or 绿"。v1.7.3 让你**点角标**直接跳到 change 详情页的 Contract 区块，
+给出每条 violation 的 `kind / id / severity / reason`，以及对应源文件的绝对路径——能直接复制
+丢进 IDE 跳转。
+
+### 入口
+
+| 从哪 | 怎么进入 |
+|------|---------|
+| 首页 | 直接点卡片上的 `pact ✗ N` / `pact ! N` / `pact ✓` 角标（不会触发整张卡片的跳转） |
+| change 详情页 | URL 加 `#contract` anchor，如 `change.html?id=add-todo-list#contract` |
+| 任何外部链接 | 同上 anchor，会自动滚到 Contract 卡片 |
+
+### 看到什么
+
+```
+┌─ Contract  ✗ broken   vs nextjs-web@0.1.0     [📋 copy adapter.yaml path]
+│  2 broken · 0 warn · 12 satisfied
+│
+│  ✗ Broken (2)
+│  ┌────────┬─────────────────────────────────────────────────┬──────────────┐
+│  │ kind   │ id / reason                                     │              │
+│  ├────────┼─────────────────────────────────────────────────┼──────────────┤
+│  │ skill  │ react-server-components                         │ 📋 copy path │
+│  │        │ consumer used skill/react-server-components     │              │
+│  │        │ (uses=1) but adapter no longer provides it      │              │
+│  ├────────┼─────────────────────────────────────────────────┼──────────────┤
+│  │ rule   │ react-hooks                                     │ 📋 copy path │
+│  │        │ consumer used rule/react-hooks (uses=4) but ... │              │
+│  └────────┴─────────────────────────────────────────────────┴──────────────┘
+│
+│  ▶ ✓ 12 satisfied (展开查看)
+└─
+```
+
+### 数据来自哪里
+
+```
+GET /_data/contract-detail.json?change=<change_id>   ← 新端点，3s TTL per-change 缓存
+```
+
+服务端用 `pl-contract-verify.sh --change <id> --json` 跑单个 change 的完整 verify report，
+**不削减** violation/warning 列表，并为每条记录补上 `source_path` 绝对路径：
+
+| kind | source_path 解析规则 |
+|------|----------------------|
+| `skill` | `adapters/<dir>/skills/<id>.{md,yaml,yml}` |
+| `rule` | `adapters/<dir>/rules/<id>.{md,yaml,yml}` |
+| `agent` | `adapters/<dir>/agents/<id>.{md,yaml,yml}` |
+| `template` | `adapters/<dir>/templates/<id>.{md,yaml,yml}` |
+| `build_command` / `capability` / `adapter` | `adapters/<dir>/adapter.yaml` |
+
+`<dir>` 通过扫 `$PL_HOME/adapters/*/adapter.yaml` 取 `metadata.id`，30s 缓存。
+解析失败 → `source_path: ""`，前端不渲染复制按钮（其它信息照常显示）。
+
+### 当端点不可用时
+
+跟 `/_data/contracts.json` 同样的 graceful degradation —— 返回 `{ available: false, reason: ... }`，
+前端识别后整个 Contract 区块不渲染（隐藏 `<section id="contract-section">`），其它部分不受影响。
+常见 reason 见上节。
+
+---
+
 ## 常见问题
 
 ### Q1. 页面打开但卡片/事件是空的
@@ -308,6 +372,7 @@ echo '{"ts":"2026-04-23T14:00:00Z","trace_id":"t99","change_id":"feat-auth","pha
 | 能力探测 | `HEAD /_events/ping` 校验 `Content-Type` | `dashboard/assets/live.js` |
 | 降级 | probe 失败 → 一次性 fetch `_data.json` + jsonl | `dashboard/{index,change}.html` |
 | Contract 角标（v1.7.2） | `GET /_data/contracts.json`，server 内调 `pl-contract-verify.sh --json`，3s TTL 缓存 | `scripts/_lib/dashboard-server.py` |
+| Contract drill-down（v1.7.3） | `GET /_data/contract-detail.json?change=<id>`，单 change 完整 report + `source_path` 解析（adapter dir 扫描 30s 缓存） | `scripts/_lib/dashboard-server.py` + `dashboard/change.html` |
 
 ---
 

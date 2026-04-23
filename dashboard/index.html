@@ -112,6 +112,7 @@ function gateStatusBadge(status) {
 
 // 生成 contract pact 角标。无 pact / 端点不可用 → 返回空串（卡片就不挂 badge）
 // 有 pact → 一个小色块 + tooltip 列出 broken/warn 的前几条 + adapter@version
+// v1.7.3: 角标本身是按钮，点击直接跳到 change.html#contract drill-down
 function contractBadge(changeId) {
   const info = contractStatus[changeId];
   if (!info) return '';   // 该 change 还没产 pact
@@ -120,7 +121,7 @@ function contractBadge(changeId) {
   if (info.status === 'broken') {
     cls = 'badge-red';
     label = `pact ✗ ${info.broken_count}`;
-    tip = `pact broken (${info.broken_count} violation${info.broken_count === 1 ? '' : 's'}) against ${adapter}`;
+    tip = `pact broken (${info.broken_count} violation${info.broken_count === 1 ? '' : 's'}) against ${adapter}\nclick → drill-down`;
     if (info.broken_examples && info.broken_examples.length) {
       tip += '\n  • ' + info.broken_examples.join('\n  • ');
       if (info.broken_count > info.broken_examples.length) tip += `\n  • … +${info.broken_count - info.broken_examples.length} more`;
@@ -128,16 +129,21 @@ function contractBadge(changeId) {
   } else if (info.status === 'warn') {
     cls = 'badge-yellow';
     label = `pact ! ${info.warn_count}`;
-    tip = `pact uses deprecated capability (${info.warn_count} warning${info.warn_count === 1 ? '' : 's'}) against ${adapter}`;
+    tip = `pact uses deprecated capability (${info.warn_count} warning${info.warn_count === 1 ? '' : 's'}) against ${adapter}\nclick → drill-down`;
     if (info.warn_examples && info.warn_examples.length) {
       tip += '\n  • ' + info.warn_examples.join('\n  • ');
     }
   } else {
     cls = 'badge-green';
     label = 'pact ✓';
-    tip = `pact satisfied against ${adapter}`;
+    tip = `pact satisfied against ${adapter}\nclick → drill-down`;
   }
-  return `<span class="badge ${cls}" title="${tip.replace(/"/g, '&quot;')}">${label}</span>`;
+  // 注意：badge 在 <a class="card"> 内部，需要 stopPropagation + preventDefault 把
+  // "drill-down 锚点跳转"和"卡片整体跳到 timeline"区分开
+  const drillUrl = `change.html?id=${encodeURIComponent(changeId)}#contract`;
+  const onclick = `event.stopPropagation(); event.preventDefault(); window.location.href='${drillUrl}'; return false;`;
+  return `<span class="badge ${cls}" role="button" tabindex="0" style="cursor:pointer;" `
+    + `onclick="${onclick}" title="${tip.replace(/"/g, '&quot;')}">${label}</span>`;
 }
 
 // 顶部 summary：N satisfied · M warn · K broken。可点击折叠，看哪些 broken。

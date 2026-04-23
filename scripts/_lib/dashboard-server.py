@@ -60,6 +60,15 @@ CONTRACTS_CACHE = {
     "ttl_sec": 3.0,
 }
 
+# /_data/contract-detail.json?change=<id> 的 per-change 缓存（v1.7.3 新增）
+# 单 change 跑 verify 比 all 还便宜（pact 少一半），但前端 drill-down 时若同时打开
+# 多个 tab 也别让每个 tab 都触发一次 yaml 解析
+CONTRACT_DETAIL_CACHE = {
+    "by_change": {},   # change_id -> {"ts": float, "payload": dict}
+    "lock": threading.Lock(),
+    "ttl_sec": 3.0,
+}
+
 # 每个 change 一个 Broadcaster，index 视图也有一个
 # key: "change:<id>" | "index"
 # value: Broadcaster 实例
@@ -492,6 +501,223 @@ def get_contracts_payload(force=False):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Contract drill-down 详情（/_data/contract-detail.json?change=<id>） · v1.7.3
+# ─────────────────────────────────────────────────────────────────────────────
+# adapter.yaml 里 metadata.id 不一定等于目录名，所以 source_path 解析需要一次扫描
+# 把 adapter_id -> 目录路径 的映射缓存起来。adapters 目录变化频率极低，扫一次够用。
+ADAPTER_DIR_INDEX = {
+    "by_id": None,   # dict | None: adapter_id -> Path(adapter dir)
+    "lock": threading.Lock(),
+    "scanned_ts": 0.0,
+    "ttl_sec": 30.0,
+}
+
+
+def _scan_adapter_dirs():
+    """扫 $PL_HOME/adapters/*/adapter.yaml，建立 metadata.id 到目录的映射。
+
+    注意：这里**只读 metadata.id 这一行**，不解析整个 yaml，避免依赖 PyYAML。
+    （dashboard-server 自身保持零第三方依赖，PyYAML 只是被 verify 子进程间接需要）
+    """
+    pl_home = STATE.get("pl_home")
+    if pl_home is None:
+        return {}
+    adapters_dir = pl_home / "adapters"
+    if not adapters_dir.exists():
+        return {}
+    out = {}
+    for entry in sorted(adapters_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        ayml = entry / "adapter.yaml"
+        if not ayml.exists():
+            continue
+        # 极轻量解析：找 metadata: 块下首个 id: 行；找不到时 fallback 到目录名
+        try:
+            text = ayml.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            text = ""
+        adapter_id = None
+        in_metadata = False
+        for raw_line in text.splitlines():
+            line = raw_line.rstrip()
+            if not line.startswith(" ") and not line.startswith("\t"):
+                # 顶层 key 切换
+                if line.startswith("metadata:"):
+                    in_metadata = True
+                else:
+                    in_metadata = False
+                continue
+            if in_metadata:
+                stripped = line.strip()
+                if stripped.startswith("id:"):
+                    val = stripped[3:].strip().strip('"').strip("'")
+                    if val:
+                        adapter_id = val
+                    break
+        if not adapter_id:
+            adapter_id = entry.name
+        out[adapter_id] = entry
+    return out
+
+
+def get_adapter_dir(adapter_id):
+    """带 30s 缓存的 adapter 目录解析。"""
+    now = time.time()
+    with ADAPTER_DIR_INDEX["lock"]:
+        if (
+            ADAPTER_DIR_INDEX["by_id"] is None
+            or (now - ADAPTER_DIR_INDEX["scanned_ts"]) > ADAPTER_DIR_INDEX["ttl_sec"]
+        ):
+            ADAPTER_DIR_INDEX["by_id"] = _scan_adapter_dirs()
+            ADAPTER_DIR_INDEX["scanned_ts"] = now
+        return ADAPTER_DIR_INDEX["by_id"].get(adapter_id)
+
+
+def _resolve_source_path(adapter_id, kind, item_id):
+    """根据 violation/warning/satisfied 的 kind+id 给出绝对源文件路径。
+
+    解析规则（命中第一个就返回）：
+      - skill   : adapters/<dir>/skills/<id>.{md,yaml,yml}
+      - rule    : adapters/<dir>/rules/<id>.{md,yaml,yml}
+      - agent   : adapters/<dir>/agents/<id>.{md,yaml,yml}
+      - template: adapters/<dir>/templates/<id>.{md,yaml,yml}
+      - build_command / capability / adapter / 其它 : adapters/<dir>/adapter.yaml
+
+    解析失败返回 ""（前端拿到空串就不渲染"复制路径"按钮）。
+    """
+    adir = get_adapter_dir(adapter_id)
+    if adir is None:
+        return ""
+    asset_dir_map = {
+        "skill": "skills",
+        "rule": "rules",
+        "agent": "agents",
+        "template": "templates",
+    }
+    sub = asset_dir_map.get(kind)
+    if sub is None:
+        # 落到 adapter.yaml 自身
+        ayml = adir / "adapter.yaml"
+        return str(ayml) if ayml.exists() else ""
+    for ext in (".md", ".yaml", ".yml"):
+        candidate = adir / sub / f"{item_id}{ext}"
+        if candidate.exists():
+            return str(candidate)
+    return ""
+
+
+def _empty_detail_payload(change_id, reason):
+    return {
+        "apiVersion": "piao.dev/v1",
+        "kind": "ContractDetail",
+        "available": False,
+        "change_id": change_id,
+        "reason": reason,
+    }
+
+
+def _compute_contract_detail(change_id):
+    pl_home = STATE.get("pl_home")
+    pl_project = STATE.get("pl_project")
+    contracts_dir = STATE.get("contracts_dir")
+
+    if pl_home is None or pl_project is None:
+        return _empty_detail_payload(change_id, "dashboard server 没拿到 --pl-home / --pl-project")
+    if contracts_dir is None or not contracts_dir.exists():
+        return _empty_detail_payload(change_id, "no pacts yet")
+
+    pact_file = contracts_dir / f"{change_id}.consumed.yaml"
+    if not pact_file.exists():
+        return _empty_detail_payload(change_id, f"no pact for change '{change_id}'")
+
+    verify_script = pl_home / "scripts" / "pl-contract-verify.sh"
+    if not verify_script.exists():
+        return _empty_detail_payload(change_id, f"pl-contract-verify.sh not found at {verify_script}")
+
+    env = dict(os.environ)
+    env["PL_HOME"] = str(pl_home)
+    env["PL_PROJECT"] = str(pl_project)
+
+    try:
+        proc = subprocess.run(
+            ["bash", str(verify_script), "--change", change_id, "--json"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        return _empty_detail_payload(change_id, "verify timeout (>15s)")
+    except Exception as e:  # pragma: no cover
+        return _empty_detail_payload(change_id, f"failed to run verify: {e}")
+
+    if proc.returncode == 2:
+        return _empty_detail_payload(
+            change_id, f"verify returned exit 2: {(proc.stderr or '').strip()[:200]}"
+        )
+
+    try:
+        report = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        return _empty_detail_payload(change_id, f"verify output not JSON: {e}")
+
+    reports = report.get("reports") or []
+    if not reports:
+        return _empty_detail_payload(change_id, "verify returned 0 reports")
+
+    r = reports[0]
+    adapter_id = r.get("adapter") or ""
+    adir = get_adapter_dir(adapter_id) if adapter_id else None
+    adapter_path = str(adir / "adapter.yaml") if (adir and (adir / "adapter.yaml").exists()) else ""
+
+    def enrich(items):
+        out = []
+        for it in items or []:
+            kind = it.get("kind", "")
+            iid = it.get("id", "")
+            entry = dict(it)
+            entry["source_path"] = _resolve_source_path(adapter_id, kind, iid) if adapter_id else ""
+            out.append(entry)
+        return out
+
+    return {
+        "apiVersion": "piao.dev/v1",
+        "kind": "ContractDetail",
+        "available": True,
+        "change_id": r.get("change_id") or change_id,
+        "adapter": adapter_id,
+        "adapter_version": r.get("adapter_version") or "",
+        "adapter_path": adapter_path,
+        "status": r.get("status", "satisfied"),
+        "summary": {
+            "violations": len(r.get("violations") or []),
+            "warnings": len(r.get("warnings") or []),
+            "satisfied": len(r.get("satisfied") or []),
+        },
+        "violations": enrich(r.get("violations")),
+        "warnings": enrich(r.get("warnings")),
+        "satisfied": enrich(r.get("satisfied")),
+        "versions_seen": r.get("versions_seen") or [],
+    }
+
+
+def get_contract_detail(change_id, force=False):
+    now = time.time()
+    with CONTRACT_DETAIL_CACHE["lock"]:
+        ent = CONTRACT_DETAIL_CACHE["by_change"].get(change_id)
+        if (
+            not force
+            and ent is not None
+            and (now - ent["ts"]) < CONTRACT_DETAIL_CACHE["ttl_sec"]
+        ):
+            return ent["payload"]
+        payload = _compute_contract_detail(change_id)
+        CONTRACT_DETAIL_CACHE["by_change"][change_id] = {"ts": now, "payload": payload}
+        return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # HTTP handler
 # ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
@@ -596,6 +822,14 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/_data/contracts.json":
                 self._handle_contracts_json()
                 return
+            if p == "/_data/contract-detail.json":
+                qs = parse_qs(pu.query)
+                change_id = qs.get("change", [""])[0]
+                if not change_id:
+                    self.send_error(400, "missing change param")
+                    return
+                self._handle_contract_detail_json(change_id)
+                return
 
             # 默认：静态文件
             self._send_static(p)
@@ -618,11 +852,21 @@ class Handler(BaseHTTPRequestHandler):
             payload = get_contracts_payload()
         except Exception as e:  # pragma: no cover - 防御
             payload = _empty_contracts_payload(f"server error: {e}")
+        self._send_json(payload)
+
+    def _handle_contract_detail_json(self, change_id):
+        """v1.7.3：单 change 的完整 verify report，附 source_path。drill-down 用。"""
+        try:
+            payload = get_contract_detail(change_id)
+        except Exception as e:  # pragma: no cover - 防御
+            payload = _empty_detail_payload(change_id, f"server error: {e}")
+        self._send_json(payload)
+
+    def _send_json(self, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        # 前端会自己节流；服务端这里也禁缓存让浏览器拿到最新值
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()

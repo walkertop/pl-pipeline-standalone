@@ -29,6 +29,74 @@
 > 📺 **2026-04-24 v1.7.2**：CDC 进 Dashboard——pact 状态从 CLI 出现到首页角标，
 > 每个 change 卡片自带 `pact ✓ / ! N / ✗ N` badge，顶部一行 `CDC contracts` 汇总，
 > ARCHIVE auto-aggregate 后秒级自动刷新。让"契约健康度"成为日常可见的指标。
+>
+> 🔎 **2026-04-24 v1.7.3**：CDC drill-down——v1.7.2 的角标从"红或绿"升级为"点进去看哪里红"。
+> 点首页角标 → 跳到 change 详情页 Contract 卡片，每条 violation 显示完整 reason
+> 和源文件绝对路径（一键复制丢进 IDE 跳转）。从 visibility 到 actionability。
+
+---
+
+## [1.7.3] — 2026-04-24 · CDC drill-down 🔎
+
+**主题**：v1.7.2 让契约健康度首页可见，但角标只回答 "红 or 绿"——红的时候用户还是要
+回到 CLI 跑 `pl-contract-verify.sh` 看具体哪条 violation。v1.7.3 让点击直接到详情、
+显示完整 reason 和文件路径，把"看到问题"和"开始修"之间的步骤压到接近零。
+
+### 🆕 新增
+
+- **Dashboard server 新端点 `GET /_data/contract-detail.json?change=<id>`**
+  （`scripts/_lib/dashboard-server.py`）
+  - 内部 shell out 到 `pl-contract-verify.sh --change <id> --json`，**完整 report 不削减**
+  - 给每条 violation/warning/satisfied 补 `source_path`：根据 kind 解析到
+    `adapters/<dir>/skills|rules|agents|templates/<id>.{md,yaml,yml}` 或 `adapter.yaml`
+  - adapter 目录映射（`metadata.id` → 目录路径）30s 缓存，单次扫描；不依赖 PyYAML
+  - per-change 3s TTL 缓存
+  - 非阻塞失败：跟 `/_data/contracts.json` 一致的 graceful degradation
+- **change 详情页 Contract 卡片**（`dashboard/change.html`）
+  - 显示 status badge / adapter@version / 计数（broken · warn · satisfied）
+  - "Broken" / "Warnings" 表格：每行 kind + id + 完整 reason + `📋 copy path` 按钮
+  - "Satisfied" 默认折叠（避免淹没违规），点击展开
+  - 顶部 `📋 copy adapter.yaml path` 按钮
+  - 复制实现：navigator.clipboard 优先 → execCommand 兜底 → "✗ copy failed" 兜底反馈
+  - URL `#contract` anchor 自动滚动定位
+- **首页角标可点跳转**（`dashboard/index.html`）
+  - `pact ✓ / ! N / ✗ N` 角标变为 button，点击 stopPropagation + preventDefault
+    → 跳到 `change.html?id=<id>#contract`
+  - 卡片整体仍跳到 timeline，行为不冲突
+
+### 🛠 改进
+
+- 文档：`docs/dashboard-guide.md` 新增 "Contract 下钻 — 看 violation 详情（v1.7.3+）"
+  小节，含完整 ASCII 图示、kind→source_path 映射表、graceful degradation 说明
+- 技术对照表：新增 v1.7.3 行
+
+### ✅ 验证
+
+- ✅ Next.js demo `add-todo-list` (satisfied)：14/0/0，全部 source_path 正确解析
+- ✅ Next.js demo `add-todo-list` 人为破坏（删 react-server-components skill + react-hooks rule）：
+  status=broken, summary=2/0/12，violations 表显示完整 reason
+- ✅ FastAPI demo `add-users-api` (satisfied)：14/0/0，python-fastapi 适配器路径解析正常
+- ✅ 边界：`?change=does-not-exist` → `available:false, reason:"no pact for change ..."`
+- ✅ 边界：缺 `?change` 参数 → HTTP 400
+- ✅ 跨 adapter 目录命名（`adapter-nextjs-web` 目录 + `metadata.id: nextjs-web`）正确解析
+
+### 📁 文件变更
+
+```
+M scripts/_lib/dashboard-server.py    (+~200 行：新端点 + adapter dir scan + source_path)
+M dashboard/change.html               (+~210 行：Contract section + copy logic)
+M dashboard/index.html                (badge 改 button + onclick drill-down)
+M docs/dashboard-guide.md             (+~70 行新章节)
+M CHANGELOG.md                        (本条)
+```
+
+### 🚧 已知边界
+
+- `clipboard.writeText` 在没有 https 或 document 没 focus 时会拒（headless 测试就遇到了）；
+  已加 execCommand fallback + "✗ copy failed" 反馈，不会卡死按钮
+- adapter `metadata.id` 解析用的是行扫描（避免 PyYAML 依赖），如果 yaml 把 metadata
+  写成 inline `metadata: {id: foo}` 会解析失败 → fallback 到目录名（仍能工作，只是
+  显示的 adapter 名可能跟项目惯例不一致）
 
 ---
 
