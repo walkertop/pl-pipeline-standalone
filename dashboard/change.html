@@ -14,6 +14,7 @@
     <div class="nav-brand-mark">pl</div>
     <span id="brand-title">pl-pipeline Dashboard</span>
     <span class="nav-meta" style="margin-left: 12px;" id="brand-meta"></span>
+    <span id="live-badge-slot"></span>
   </div>
   <button class="theme-toggle" id="theme-toggle" title="切换主题">
     <span id="theme-icon">☀</span>
@@ -44,6 +45,7 @@
 <script type="module">
 import { parseJSONL, aggregateChange, STAGES, stageStatus, renderEvent, isCritical, fmtTs } from './assets/parser.js';
 import { initTheme } from './assets/theme.js';
+import { probeLiveReload, subscribeChange, mountStatusBadge } from './assets/live.js';
 
 initTheme();
 
@@ -54,6 +56,11 @@ if (!changeId) {
   document.getElementById('change-title').textContent = 'no change id';
   throw new Error('missing id');
 }
+
+// ─── 全局事件缓冲区（live reload 增量源） ─────────────────────────────
+let allEvents = [];   // 有序：旧→新
+let liveMode = false;
+const badge = mountStatusBadge(document.getElementById('live-badge-slot'));
 
 async function loadIndex() {
   const resp = await fetch('./_data.json');
@@ -109,18 +116,21 @@ function categorize(e) {
   return 'business';
 }
 
-function renderEventRow(e, idx) {
+function eventRowHTML(e, globalIdx, { justAppended = false } = {}) {
   const r = renderEvent(e);
   const critical = isCritical(e);
   const cat = categorize(e);
+  const cls = ['event'];
+  if (critical) cls.push('critical');
+  if (justAppended) cls.push('just-appended');
   return `
-    <div class="event ${critical ? 'critical' : ''}" data-idx="${idx}" data-cat="${cat}" onclick="togglePayload(${idx})">
+    <div class="${cls.join(' ')}" data-idx="${globalIdx}" data-cat="${cat}" onclick="togglePayload(${globalIdx})">
       <span class="event-ts">${fmtTs(e.ts)}</span>
       <span class="event-phase badge badge-${phaseColor(e.phase)}">${e.phase || '—'}</span>
       <span class="event-title"><span class="event-icon ${r.cls}">${r.icon}</span> ${r.title}</span>
       <span class="dim">${e.actor ? e.actor.split(':')[1]?.split('@')[0] || '' : ''}</span>
     </div>
-    <div class="event-payload" id="payload-${idx}">
+    <div class="event-payload" id="payload-${globalIdx}">
       ${Object.entries(e.data || {}).map(([k, v]) =>
         `<div class="event-payload-row"><span class="event-payload-key">${k}:</span><span class="event-payload-val">${formatPayloadValue(v)}</span></div>`
       ).join('') || '<span class="dim">(no payload)</span>'}
@@ -144,62 +154,147 @@ window.togglePayload = function(idx) {
   if (el) el.classList.toggle('open');
 };
 
-function setupFilters(allEvents) {
-  const flt = {
+function refreshHeader() {
+  if (allEvents.length === 0) {
+    document.getElementById('change-sub').textContent = 'events.jsonl 为空或不存在';
+    return;
+  }
+  const agg = aggregateChange(allEvents);
+  document.getElementById('change-sub').textContent = `${agg.total_events} events · stage ${agg.stage}`;
+  document.getElementById('info-grid').innerHTML = renderInfoCards(agg);
+  document.getElementById('stage-row').innerHTML = renderStagePipeline(agg);
+  document.getElementById('event-count').textContent = `(${allEvents.length})`;
+}
+
+function renderAll() {
+  // 最新在上；data-idx 用全局索引（allEvents 位置）保持稳定
+  const html = [];
+  for (let i = allEvents.length - 1; i >= 0; i--) {
+    html.push(eventRowHTML(allEvents[i], i));
+  }
+  document.getElementById('events').innerHTML = html.join('');
+  applyFilters();
+}
+
+function prependNewEvents(newEvs) {
+  // 新事件 push 到 allEvents 末尾，DOM 前插入
+  const container = document.getElementById('events');
+  const fragments = [];
+  const firstIdx = allEvents.length;
+  for (let k = newEvs.length - 1; k >= 0; k--) {
+    // 倒序插入到 DOM 最前，保持"最新在上"
+    const globalIdx = firstIdx + k;
+    fragments.push(eventRowHTML(newEvs[k], globalIdx, { justAppended: true }));
+  }
+  // 更新底层数组（按时序）
+  for (const e of newEvs) allEvents.push(e);
+
+  // 插入 DOM 前面
+  const wrap = document.createElement('div');
+  wrap.innerHTML = fragments.join('');
+  // reverse 顺序插入：fragments 已是"新→旧"，直接整体 prepend
+  const nodes = Array.from(wrap.children);
+  const ref = container.firstChild;
+  for (const node of nodes) {
+    container.insertBefore(node, ref);
+  }
+  // 1.2s 后去掉闪烁 class
+  setTimeout(() => {
+    nodes.forEach(n => n.classList?.remove?.('just-appended'));
+  }, 1400);
+
+  applyFilters();
+}
+
+let filters = null;
+function setupFilters() {
+  if (filters) return;  // 已注册
+  filters = {
     artifact: document.getElementById('flt-artifact'),
     business: document.getElementById('flt-business'),
     gate: document.getElementById('flt-gate'),
   };
-  const apply = () => {
-    const a = flt.artifact.checked, b = flt.business.checked, g = flt.gate.checked;
-    document.querySelectorAll('.event').forEach(el => {
-      const c = el.dataset.cat;
-      const show = (c === 'artifact' && a) || (c === 'business' && b) || (c === 'gate' && g);
-      el.style.display = show ? '' : 'none';
-      const pl = document.getElementById(`payload-${el.dataset.idx}`);
-      if (pl && !show) pl.classList.remove('open');
-    });
-  };
-  Object.values(flt).forEach(cb => cb.addEventListener('change', apply));
+  Object.values(filters).forEach(cb => cb.addEventListener('change', applyFilters));
+}
+function applyFilters() {
+  if (!filters) return;
+  const a = filters.artifact.checked, b = filters.business.checked, g = filters.gate.checked;
+  document.querySelectorAll('.event').forEach(el => {
+    const c = el.dataset.cat;
+    const show = (c === 'artifact' && a) || (c === 'business' && b) || (c === 'gate' && g);
+    el.style.display = show ? '' : 'none';
+    const pl = document.getElementById(`payload-${el.dataset.idx}`);
+    if (pl && !show) pl.classList.remove('open');
+  });
 }
 
 async function main() {
   const idx = await loadIndex();
   const change = idx.changes.find(c => c.id === changeId);
-  if (!change) {
-    document.getElementById('change-title').textContent = `${changeId} (not found)`;
-    return;
-  }
-
   document.getElementById('change-title').textContent = changeId;
   document.getElementById('brand-meta').textContent = `/ ${changeId}`;
+  setupFilters();
 
-  const events = await loadEvents(change.trace_path);
-  if (events.length === 0) {
-    document.getElementById('change-sub').textContent = 'events.jsonl 为空或不存在';
-    return;
-  }
+  // 先尝试 live reload
+  liveMode = await probeLiveReload();
 
-  const agg = aggregateChange(events);
-  document.getElementById('change-sub').textContent = `${agg.total_events} events · stage ${agg.stage}`;
-  document.getElementById('info-grid').innerHTML = renderInfoCards(agg);
-  document.getElementById('stage-row').innerHTML = renderStagePipeline(agg);
-  document.getElementById('event-count').textContent = `(${events.length})`;
-
-  // 事件列表（最新在上）
-  const reversed = [...events].reverse();
-  const html = reversed.map((e, i) => renderEventRow(e, i)).join('');
-  document.getElementById('events').innerHTML = html;
-
-  setupFilters(events);
-
-  // 自动滚到首个关键事件
-  const firstCritIdx = reversed.findIndex(isCritical);
-  if (firstCritIdx >= 0) {
-    setTimeout(() => {
-      const el = document.querySelector(`.event[data-idx="${firstCritIdx}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 300);
+  if (liveMode) {
+    // live 模式：订阅 SSE，snapshot 就是初始数据
+    badge.set('connecting');
+    subscribeChange(changeId, {
+      onStatus: (s) => {
+        if (s === 'open') badge.set('on');
+        else if (s === 'error') badge.set('error');
+        else if (s === 'connecting') badge.set('connecting');
+      },
+      onSnapshot: (events) => {
+        allEvents = events.slice();
+        refreshHeader();
+        renderAll();
+        // 自动滚到首个关键事件
+        const firstCritIdx = [...allEvents].reverse().findIndex(isCritical);
+        if (firstCritIdx >= 0) {
+          setTimeout(() => {
+            const el = document.querySelector(`.event[data-idx="${allEvents.length - 1 - firstCritIdx}"]`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        }
+      },
+      onAppend: (events) => {
+        prependNewEvents(events);
+        refreshHeader();
+      },
+      onReset: () => {
+        allEvents = [];
+        document.getElementById('events').innerHTML = '';
+        refreshHeader();
+      },
+      onMissing: () => {
+        document.getElementById('events').innerHTML = '';
+        document.getElementById('change-sub').textContent = 'events.jsonl 不存在（等待写入…）';
+      },
+    });
+  } else {
+    // 降级：一次性静态加载（保留 v1.3.0 行为）
+    badge.set('off');
+    if (!change) {
+      document.getElementById('change-title').textContent = `${changeId} (not found)`;
+      return;
+    }
+    allEvents = await loadEvents(change.trace_path);
+    if (allEvents.length === 0) {
+      document.getElementById('change-sub').textContent = 'events.jsonl 为空或不存在';
+      return;
+    }
+    refreshHeader();
+    renderAll();
+    const firstCritIdx = [...allEvents].reverse().findIndex(isCritical);
+    if (firstCritIdx >= 0) {
+      setTimeout(() => {
+        const el = document.querySelector(`.event[data-idx="${allEvents.length - 1 - firstCritIdx}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
   }
 }
 

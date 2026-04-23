@@ -1,0 +1,489 @@
+#!/usr/bin/env python3
+# =============================================================================
+# dashboard-server.py — pl-pipeline Dashboard Live Reload HTTP server
+# =============================================================================
+#
+# 职责：
+#   1. 静态文件托管（等价于 python3 -m http.server --bind 127.0.0.1）
+#   2. SSE 端点：
+#        GET /_events/stream?change=<id>  — tail 单个 change 的 events.jsonl
+#        GET /_events/index               — 推送 _data.json / trace 目录的任何变化
+#        GET /_events/ping                — 5 秒一次心跳，用于前端连通性探测
+#   3. 自动降级：当 trace 目录不存在时仍能托管静态文件
+#
+# 设计：
+#   - 零第三方依赖：仅用 Python stdlib（http.server + threading）
+#   - 轮询式 tail（与 observe-fs.py 同策略）：每 0.5s 检查 mtime + 文件大小
+#   - 心跳 :keepalive 每 15s 发送一次防止中间件断连
+#   - 自然退出：SIGINT / SIGTERM 关闭所有 SSE 订阅
+#
+# 用法（被 pl-dashboard.sh 调起）：
+#   python3 dashboard-server.py \
+#       --dash-dir /path/to/dashboard \
+#       --trace-dir /path/to/pipeline-output/trace \
+#       --data-file /path/to/dashboard/_data.json \
+#       --port 8889
+# =============================================================================
+
+import argparse
+import json
+import mimetypes
+import os
+import queue
+import signal
+import sys
+import threading
+import time
+import traceback
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 全局状态
+# ─────────────────────────────────────────────────────────────────────────────
+STATE = {
+    "dash_dir": None,     # Path: 静态文件根
+    "trace_dir": None,    # Path | None
+    "data_file": None,    # Path: _data.json
+}
+
+# 每个 change 一个 Broadcaster，index 视图也有一个
+# key: "change:<id>" | "index"
+# value: Broadcaster 实例
+BROADCASTERS = {}
+BROADCASTERS_LOCK = threading.Lock()
+
+# 全局退出标志
+SHUTDOWN = threading.Event()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Broadcaster — 多订阅者事件分发
+# ─────────────────────────────────────────────────────────────────────────────
+class Broadcaster:
+    """每个 Broadcaster 对应一个被观察的资源（一个 jsonl 或 _data.json）。
+
+    订阅者通过 subscribe() 拿到一个 queue，watcher 线程把新事件 put 进所有 queue。
+    订阅者关闭连接时调用 unsubscribe()，最后一个订阅者离开后 watcher 自动停。
+    """
+
+    def __init__(self, name, watcher_fn):
+        self.name = name
+        self.watcher_fn = watcher_fn
+        self.subscribers = []        # list[queue.Queue]
+        self.lock = threading.Lock()
+        self.thread = None
+        self.stop_flag = threading.Event()
+
+    def subscribe(self):
+        q = queue.Queue(maxsize=1024)
+        with self.lock:
+            self.subscribers.append(q)
+            need_start = self.thread is None or not self.thread.is_alive()
+        if need_start:
+            self.stop_flag.clear()
+            self.thread = threading.Thread(
+                target=self._run_watcher, name=f"watch-{self.name}", daemon=True
+            )
+            self.thread.start()
+        return q
+
+    def unsubscribe(self, q):
+        with self.lock:
+            if q in self.subscribers:
+                self.subscribers.remove(q)
+            no_more = len(self.subscribers) == 0
+        if no_more:
+            self.stop_flag.set()  # watcher 线程退出
+
+    def publish(self, payload):
+        """把 payload 广播给所有订阅者（单条 dict）。"""
+        with self.lock:
+            dead = []
+            for q in self.subscribers:
+                try:
+                    q.put_nowait(payload)
+                except queue.Full:
+                    dead.append(q)
+            for d in dead:
+                self.subscribers.remove(d)
+
+    def _run_watcher(self):
+        try:
+            self.watcher_fn(self, self.stop_flag)
+        except Exception:
+            traceback.print_exc()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Watcher 函数
+# ─────────────────────────────────────────────────────────────────────────────
+def tail_jsonl_watcher(bcast, stop_flag, path, change_id):
+    """轮询式 tail — 追加新行就 publish {event:'append', lines:[json...]}.
+
+    支持：
+      - 初始快照：订阅时先发 {event:'snapshot', events:[...]}
+      - 文件不存在/消失：发 {event:'missing'}
+      - 文件被截断 / rotate：发 {event:'reset'} 并重新读取
+    """
+    pos = 0
+    last_size = -1
+    last_mtime = 0
+    snapshot_sent = False
+
+    while not stop_flag.is_set() and not SHUTDOWN.is_set():
+        try:
+            if not path.exists():
+                if snapshot_sent:
+                    bcast.publish({"event": "missing"})
+                    snapshot_sent = False
+                    pos = 0
+                    last_size = -1
+                time.sleep(0.5)
+                continue
+
+            st = path.stat()
+            size = st.st_size
+            mtime = st.st_mtime
+
+            # 初始快照
+            if not snapshot_sent:
+                with path.open("r", encoding="utf-8") as f:
+                    content = f.read()
+                events = []
+                for line in content.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+                bcast.publish({
+                    "event": "snapshot",
+                    "change_id": change_id,
+                    "events": events,
+                    "pos": len(content.encode("utf-8")),
+                })
+                pos = len(content.encode("utf-8"))
+                last_size = size
+                last_mtime = mtime
+                snapshot_sent = True
+                time.sleep(0.5)
+                continue
+
+            # 文件被截断 / rotate
+            if size < last_size:
+                bcast.publish({"event": "reset"})
+                snapshot_sent = False
+                pos = 0
+                last_size = -1
+                continue
+
+            # 有新内容
+            if size > last_size or mtime != last_mtime:
+                with path.open("r", encoding="utf-8") as f:
+                    f.seek(pos)
+                    new_raw = f.read()
+                new_events = []
+                for line in new_raw.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        new_events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+                if new_events:
+                    bcast.publish({
+                        "event": "append",
+                        "change_id": change_id,
+                        "events": new_events,
+                    })
+                pos = size
+                last_size = size
+                last_mtime = mtime
+        except Exception:
+            traceback.print_exc()
+        time.sleep(0.5)
+
+
+def index_watcher(bcast, stop_flag):
+    """监视 trace_dir 下所有 *.events.jsonl 的文件列表与 mtime。
+
+    任何变化（新 change 出现 / 现有 change 追加）就 publish
+    {event:'updated', changes:[{id, mtime, size}, ...]}
+    """
+    trace_dir = STATE["trace_dir"]
+    data_file = STATE["data_file"]
+    last_sig = None
+
+    while not stop_flag.is_set() and not SHUTDOWN.is_set():
+        try:
+            sig = []
+            changes_info = []
+            if trace_dir and trace_dir.exists():
+                for p in sorted(trace_dir.glob("*.events.jsonl")):
+                    st = p.stat()
+                    change_id = p.name.replace(".events.jsonl", "")
+                    changes_info.append({
+                        "id": change_id,
+                        "mtime": st.st_mtime,
+                        "size": st.st_size,
+                    })
+                    sig.append((change_id, st.st_mtime, st.st_size))
+            # data_file 本身也算
+            if data_file and data_file.exists():
+                st = data_file.stat()
+                sig.append(("__data__", st.st_mtime, st.st_size))
+
+            sig = tuple(sig)
+            if sig != last_sig:
+                bcast.publish({"event": "updated", "changes": changes_info})
+                last_sig = sig
+        except Exception:
+            traceback.print_exc()
+        time.sleep(1.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Broadcaster 注册表
+# ─────────────────────────────────────────────────────────────────────────────
+def get_change_broadcaster(change_id):
+    key = f"change:{change_id}"
+    with BROADCASTERS_LOCK:
+        bc = BROADCASTERS.get(key)
+        if bc is None:
+            trace_dir = STATE["trace_dir"]
+            if trace_dir is None:
+                return None
+            path = trace_dir / f"{change_id}.events.jsonl"
+            bc = Broadcaster(
+                name=key,
+                watcher_fn=lambda b, s: tail_jsonl_watcher(b, s, path, change_id),
+            )
+            BROADCASTERS[key] = bc
+        return bc
+
+
+def get_index_broadcaster():
+    key = "index"
+    with BROADCASTERS_LOCK:
+        bc = BROADCASTERS.get(key)
+        if bc is None:
+            bc = Broadcaster(name=key, watcher_fn=index_watcher)
+            BROADCASTERS[key] = bc
+        return bc
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HTTP handler
+# ─────────────────────────────────────────────────────────────────────────────
+class Handler(BaseHTTPRequestHandler):
+    # 静音默认日志（太吵），关键日志我们自己打
+    def log_message(self, format, *args):
+        if os.environ.get("PL_DASHBOARD_VERBOSE"):
+            super().log_message(format, *args)
+
+    # ---- utilities -----------------------------------------------------------
+
+    def _write_sse_headers(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+    def _send_sse(self, data_obj, event=None):
+        buf = []
+        if event:
+            buf.append(f"event: {event}\n")
+        buf.append("data: " + json.dumps(data_obj, ensure_ascii=False) + "\n\n")
+        self.wfile.write("".join(buf).encode("utf-8"))
+        self.wfile.flush()
+
+    def _send_static(self, path):
+        """静态文件托管。支持 dashboard/ 根 + trace/ 子目录。"""
+        # 规范化；禁止跳出 dash_dir 或 trace_dir
+        dash_dir = STATE["dash_dir"]
+        trace_dir = STATE["trace_dir"]
+
+        rel = path.lstrip("/")
+        if rel == "" or rel.endswith("/"):
+            rel = rel + "index.html"
+
+        # /trace/* 映射到 trace_dir（避免依赖 symlink）
+        if rel.startswith("trace/") and trace_dir is not None:
+            sub = rel[len("trace/"):]
+            target = (trace_dir / sub).resolve()
+            try:
+                target.relative_to(trace_dir.resolve())
+            except ValueError:
+                self.send_error(403, "Forbidden")
+                return
+        else:
+            target = (dash_dir / rel).resolve()
+            try:
+                target.relative_to(dash_dir.resolve())
+            except ValueError:
+                self.send_error(403, "Forbidden")
+                return
+
+        if not target.exists() or not target.is_file():
+            self.send_error(404, "Not Found")
+            return
+
+        ctype, _ = mimetypes.guess_type(str(target))
+        if ctype is None:
+            ctype = "application/octet-stream"
+        data = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
+
+    # ---- routing -------------------------------------------------------------
+
+    def do_HEAD(self):
+        # 前端探测 /_events/stream 用 HEAD
+        pu = urlparse(self.path)
+        if pu.path.startswith("/_events/"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+        else:
+            self.send_response(200)
+            self.end_headers()
+
+    def do_GET(self):
+        pu = urlparse(self.path)
+        p = pu.path
+
+        try:
+            if p == "/_events/ping":
+                self._handle_ping()
+                return
+            if p == "/_events/stream":
+                qs = parse_qs(pu.query)
+                change_id = qs.get("change", [""])[0]
+                if not change_id:
+                    self.send_error(400, "missing change param")
+                    return
+                self._handle_stream_change(change_id)
+                return
+            if p == "/_events/index":
+                self._handle_stream_index()
+                return
+
+            # 默认：静态文件
+            self._send_static(p)
+        except (BrokenPipeError, ConnectionResetError):
+            # 客户端关闭连接，正常
+            return
+        except Exception:
+            traceback.print_exc()
+
+    # ---- handlers ------------------------------------------------------------
+
+    def _handle_ping(self):
+        """一次性 SSE：回一个 ok 然后关闭。前端用来探测 SSE 能力。"""
+        self._write_sse_headers()
+        self._send_sse({"ok": True, "ts": time.time()}, event="ping")
+
+    def _handle_stream_change(self, change_id):
+        bc = get_change_broadcaster(change_id)
+        if bc is None:
+            self.send_error(503, "trace dir not available")
+            return
+        self._write_sse_headers()
+        self._send_sse({"ts": time.time(), "change_id": change_id}, event="hello")
+
+        q = bc.subscribe()
+        try:
+            last_keepalive = time.time()
+            while not SHUTDOWN.is_set():
+                try:
+                    msg = q.get(timeout=1.0)
+                    self._send_sse(msg, event=msg.get("event", "message"))
+                except queue.Empty:
+                    pass
+                # 心跳
+                if time.time() - last_keepalive > 15:
+                    self.wfile.write(b": keepalive\n\n")
+                    self.wfile.flush()
+                    last_keepalive = time.time()
+        finally:
+            bc.unsubscribe(q)
+
+    def _handle_stream_index(self):
+        bc = get_index_broadcaster()
+        self._write_sse_headers()
+        self._send_sse({"ts": time.time()}, event="hello")
+
+        q = bc.subscribe()
+        try:
+            last_keepalive = time.time()
+            while not SHUTDOWN.is_set():
+                try:
+                    msg = q.get(timeout=1.0)
+                    self._send_sse(msg, event=msg.get("event", "message"))
+                except queue.Empty:
+                    pass
+                if time.time() - last_keepalive > 15:
+                    self.wfile.write(b": keepalive\n\n")
+                    self.wfile.flush()
+                    last_keepalive = time.time()
+        finally:
+            bc.unsubscribe(q)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# main
+# ─────────────────────────────────────────────────────────────────────────────
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dash-dir", required=True)
+    ap.add_argument("--trace-dir", default="")
+    ap.add_argument("--data-file", required=True)
+    ap.add_argument("--port", type=int, default=8889)
+    ap.add_argument("--bind", default="127.0.0.1")
+    args = ap.parse_args()
+
+    STATE["dash_dir"] = Path(args.dash_dir).resolve()
+    STATE["trace_dir"] = Path(args.trace_dir).resolve() if args.trace_dir else None
+    STATE["data_file"] = Path(args.data_file).resolve()
+
+    def on_sig(signum, frame):
+        SHUTDOWN.set()
+        # 让 server 停
+        try:
+            server.shutdown()
+        except Exception:
+            pass
+
+    signal.signal(signal.SIGINT, on_sig)
+    signal.signal(signal.SIGTERM, on_sig)
+
+    server = ThreadingHTTPServer((args.bind, args.port), Handler)
+    # ThreadingHTTPServer 默认 allow_reuse_address=True；显式写一下以防回退
+    server.allow_reuse_address = True
+    server.daemon_threads = True
+    print(f"[dashboard-server] http://{args.bind}:{args.port} (live reload via SSE)",
+          file=sys.stderr, flush=True)
+    print(f"[dashboard-server]   dash_dir : {STATE['dash_dir']}", file=sys.stderr)
+    print(f"[dashboard-server]   trace_dir: {STATE['trace_dir']}", file=sys.stderr)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        SHUTDOWN.set()
+
+
+if __name__ == "__main__":
+    main()

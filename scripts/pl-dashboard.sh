@@ -10,14 +10,16 @@
 #   4. 可选自动打开浏览器
 #
 # 用法：
-#   $ pl-dashboard.sh                  # 默认端口 8889
+#   $ pl-dashboard.sh                    # 默认端口 8889，live-reload SSE 开启
 #   $ pl-dashboard.sh --port 9000 --open
 #   $ pl-dashboard.sh --project /path/to/another-project --no-server
+#   $ pl-dashboard.sh --static-only      # 降级为 python -m http.server（无 live reload）
 #
 # 设计：
 #   - 零构建：纯静态 HTML + CSS + vanilla JS
+#   - live reload：自写 SSE server（仍零第三方依赖）
 #   - Dashboard 源码住独立仓（$PL_HOME/dashboard/）
-#   - 生成的 _data.json 同时指向宿主项目的 events.jsonl（可能在外部路径）
+#   - 生成的 _data.json 同时指向宿主项目的 events.jsonl
 # =============================================================================
 
 set -o pipefail
@@ -30,20 +32,22 @@ PROJECT="${PL_PROJECT:-$PWD}"
 PORT=8889
 OPEN=0
 NO_SERVER=0
+STATIC_ONLY=0
 
 usage() {
-  sed -n '1,25p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '1,26p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --project)   PROJECT="$2"; shift 2 ;;
-    --port)      PORT="$2"; shift 2 ;;
-    --open)      OPEN=1; shift ;;
-    --no-server) NO_SERVER=1; shift ;;
-    --help|-h)   usage ;;
-    *)           echo "unknown arg: $1"; usage ;;
+    --project)     PROJECT="$2"; shift 2 ;;
+    --port)        PORT="$2"; shift 2 ;;
+    --open)        OPEN=1; shift ;;
+    --no-server)   NO_SERVER=1; shift ;;
+    --static-only) STATIC_ONLY=1; shift ;;
+    --help|-h)     usage ;;
+    *)             echo "unknown arg: $1"; usage ;;
   esac
 done
 
@@ -112,7 +116,10 @@ link_trace_dir() {
 start_server() {
   cd "$DASH_DIR"
   local url="http://localhost:$PORT"
-  printf "${GREEN}✓${NC} starting dashboard at %s\n" "$url"
+  local mode="live-reload (SSE)"
+  [[ $STATIC_ONLY -eq 1 ]] && mode="static only"
+
+  printf "${GREEN}✓${NC} starting dashboard at %s  [%s]\n" "$url" "$mode"
   printf "${BLUE}ℹ${NC} serving from: %s\n" "$DASH_DIR"
   printf "${BLUE}ℹ${NC} project:      %s\n" "$PROJECT"
   printf "  (Ctrl+C to stop)\n\n"
@@ -125,11 +132,22 @@ start_server() {
     fi
   fi
 
-  exec python3 -m http.server "$PORT" --bind 127.0.0.1
+  if [[ $STATIC_ONLY -eq 1 ]]; then
+    exec python3 -m http.server "$PORT" --bind 127.0.0.1
+  else
+    exec python3 "$PL_HOME/scripts/_lib/dashboard-server.py" \
+      --dash-dir "$DASH_DIR" \
+      --trace-dir "${TRACE_DIR:-}" \
+      --data-file "$DATA_FILE" \
+      --port "$PORT" \
+      --bind 127.0.0.1
+  fi
 }
 
 # ─── main ────────────────────────────────────────────────────────────────────
 generate_index
+# live-reload 模式下由 dashboard-server.py 自己处理 /trace/* 路由，不需 symlink；
+# 但 static-only 兼容性依赖 symlink，这里无论如何都建 link（无害）。
 link_trace_dir
 
 if [[ $NO_SERVER -eq 1 ]]; then

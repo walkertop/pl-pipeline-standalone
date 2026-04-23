@@ -7,6 +7,10 @@
 
 ## 当前版本
 
+- **v1.3.2-alpha**（2026-04-23）：Dashboard live reload（SSE 实时推送 + 自动重连 + 静态降级）
+- **v1.4.0-alpha**（2026-04-22）：retro-miner 四类离线 pattern 挖掘（频次/共现/反模式/异常）
+- **v1.3.0-alpha**（2026-04-22）：Observe 层 MVP（event v1.3 schema + fs watcher + 规则引擎 + Dashboard 双视图）
+- **v1.2.0**（2026-04-22）：retro-v2 收官版（E1~E4 闭环，4/4 通用抽象落地）
 - **v0.1.0-mvp**（2026-04-21）：独立仓建立 + 三层架构 + 2 个 reference adapter + 2 个端到端 demo
 
 ---
