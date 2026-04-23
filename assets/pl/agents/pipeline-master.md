@@ -258,12 +258,40 @@ prompt: |
 `piao-contract-drift-compute.sh` 解决的是 "adapter 单方面声明宿主应该是什么样" 的问题，
 属于 Provider→Host 单向。我们还缺另一半："consumer（change）实际用了 adapter 什么"。
 
-补上这一半之后，未来的 broker 脚本（v1.7 计划）可以聚合这些事件，自动生成
-consumer pact，回答这些问题：
+v1.7 把这"另一半"补全成了完整的双向闭环：
 
-- adapter 升级会打到哪些 change？
-- 哪些 skill / rule / template 是高频使用，哪些 0 次？
-- ARCHIVE 阶段哪些资产组合带来了正向收益？
+```
+   ┌─────────────────────────────────────────────────────────────┐
+   │  IMPLEMENT/VERIFY 阶段                                       │
+   │  ─────────────────                                           │
+   │  agent / pl-runner 每次用了 adapter 资产 → trace-adapter-use │
+   │                              ↓                               │
+   │  pipeline-output/trace/<change>.events.jsonl                 │
+   │  （adapter.use 事件流，事实账本）                              │
+   └─────────────────────────────────────────────────────────────┘
+                                 ↓
+   ┌─────────────────────────────────────────────────────────────┐
+   │  ARCHIVE 阶段（或 CI 任意时刻）                                │
+   │  ─────────────────                                           │
+   │  pl-contract-aggregate.sh                                    │
+   │  ─→ pl/contracts/<change>.consumed.yaml  (per-change pact)   │
+   │  ─→ pl/contracts/_registry.yaml          (跨 change 反向索引)  │
+   └─────────────────────────────────────────────────────────────┘
+                                 ↓
+   ┌─────────────────────────────────────────────────────────────┐
+   │  adapter PR（升级/重构）触发                                   │
+   │  ─────────────────                                           │
+   │  pl-contract-verify.sh [--strict]                            │
+   │  ─→ 拿当前 adapter.yaml provides 对账所有 pact               │
+   │  ─→ broken 项阻断 PR：哪个 change 会被打到、为什么            │
+   └─────────────────────────────────────────────────────────────┘
+```
+
+回答这些问题：
+
+- adapter 升级会打到哪些 change？→ `pl-contract-verify.sh`
+- 哪些 skill / rule / template 是高频使用，哪些 0 次？→ `_registry.yaml.adapters[*].asset_usage`
+- adapter 默默删能力或改名 → `verify` 报 broken，CI 拦截
 
 ### 何时记录
 
@@ -296,6 +324,18 @@ bash $PL_HOME/scripts/trace-adapter-use.sh \
 - **只观测，不阻塞**：本事件不参与任何 gate 评估，没记也不会让 change 失败。
 - **可重复**：同一资产被多次使用，就多次记录，broker 后续做 dedup。
 - **不臆测**：只在 agent 真的"加载了/调用了/应用了"的那一刻记录；不要为了好看补记。
+
+### 何时跑 broker（aggregator + verify）
+
+| 时机 | 命令 | 谁跑 |
+|---|---|---|
+| ARCHIVE 阶段或 PR 提交前 | `bash $PL_HOME/scripts/pl-contract-aggregate.sh` | 自动（pipeline-master） |
+| ARCHIVE 阶段或 PR 提交前 | `bash $PL_HOME/scripts/pl-contract-aggregate.sh --check` | CI 拦截"忘了 commit pact"的 PR |
+| adapter PR 上 | `bash $PL_HOME/scripts/pl-contract-verify.sh --strict` | CI 拦截 breaking 升级 |
+| 平时调试 | `bash $PL_HOME/scripts/pl-contract-verify.sh --change <id>` | 人 |
+
+`pl/contracts/*.yaml` **应当 commit 进 git**——它是事实账本，不是中间产物。
+diff 即可读、可 review。
 
 ---
 
