@@ -30,10 +30,10 @@
 
 | # | 里程碑 | 目标 | 投入 | 依赖 | 状态 |
 |---|--------|------|------|------|------|
-| A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag | 10 分钟 | 无 | 🟡 待做 |
-| **v1.5** | **核心资产迁移** | spec-normalizer 等 7 个通用资产脱敏迁到独立仓 | 4~6 天 | 无 | 🔴 **关键缺口** |
+| A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag | 10 分钟 | 无 | ✅ 已完成（pl-v1.3.2） |
+| **v1.5** | **核心资产迁移** | spec-normalizer 等 7 个通用资产脱敏迁到独立仓 | 4~6 天 | 无 | 🟡 进行中（D1） |
 | — | 辩证方法论文档 | 让模糊需求在格式化工具里有容身之地 | 已完成 | — | ✅ `docs/guides/working-with-fuzzy-intent.md` |
-| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 小时 | **v1.5** + A | 🟡 待定场景 |
+| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 小时 | **v1.5** | 🟡 待定场景 |
 | B | retro-miner 跑真实 trace | 验证 4 类挖掘算法的 precision/recall 在真实数据上是否成立 | 1–2 小时 | E' | 🟡 待做 |
 | C | Dashboard 接入 retro-miner 结果 | 把挖掘出的 pattern / anti-pattern 可视化 | 半天 | B | 🟡 待做 |
 | D | E5 trace-verifier 契约 v0.1 | 用 B 积累的真实 pattern 反推契约规则 | 半天 | B + 真实数据 | 🟡 待做 |

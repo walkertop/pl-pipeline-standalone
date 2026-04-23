@@ -20,6 +20,20 @@
 
 ---
 
+## [1.3.2] — 2026-04-23 · Dashboard Live Reload（正式版）
+
+本版本是 `1.3.2-alpha` → `1.3.2-alpha.2` 两次打磨后的**稳定版**。
+包含了原 alpha 的全部能力 + 一个严重 bug 修复 + 完整用户文档。
+
+- **完整能力**：自写 SSE server + `EventSource` 客户端 + 增量 render + 自动重连 + 静默降级（详见 [1.3.2-alpha] 段）
+- **关键修复**：per-subscriber snapshot（详见 [1.3.2-alpha.2] 段）
+- **用户文档**：[`docs/dashboard-guide.md`](./docs/dashboard-guide.md)（30 秒上手 / 4 种启动姿势 / 5 条 FAQ）
+- **辩证方法论**：[`docs/guides/working-with-fuzzy-intent.md`](./docs/guides/working-with-fuzzy-intent.md)
+
+从 alpha 升级：**无 API 变更**，只需 `git pull` 重启 `pl-dashboard.sh`。
+
+---
+
 ## [1.3.2-alpha.2] — 2026-04-23 · snapshot-lost 修复 + 用户文档
 
 ### 🐛 Fixed
