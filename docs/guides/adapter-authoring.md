@@ -523,7 +523,112 @@ cd "$PROJECT_ROOT"               # 由 SCRIPT_DIR 推导
 
 ---
 
-## 12. 发布 checklist
+## 12. 在 consumer 项目里启用契约校验（v1.7+ CDC）
+
+如果你的 adapter 已经被某些项目引用，强烈建议这些项目把 v1.7 的 CDC 校验接入 CI，
+这样你后续升级 adapter 时，能在 PR 阶段就看到"会打到哪些 consumer"。
+
+### 12.1 consumer 项目侧 CI snippet（GitHub Actions）
+
+把这段加到 consumer 项目的 `.github/workflows/contract.yml`：
+
+```yaml
+name: Contract verify
+
+on:
+  pull_request:
+    paths:
+      - 'pl/contracts/**'
+      - '.pl-adapter.yaml'
+  push:
+    branches: [main]
+
+jobs:
+  contract-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive          # 假设 pl-pipeline 作为 submodule
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pyyaml
+
+      # 1. 检查 pact 是否最新（漏 commit pact 会失败）
+      - name: pact freshness check
+        run: |
+          PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD" \
+            bash $PL_HOME/scripts/pl-contract-aggregate.sh --check
+
+      # 2. 拿 pact 对账当前 adapter（adapter PR 升级时会拦）
+      - name: contract verify --strict
+        run: |
+          PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD" \
+            bash $PL_HOME/scripts/pl-contract-verify.sh --strict
+```
+
+### 12.2 adapter 仓库侧 CI snippet（你自己的 adapter PR 拦截）
+
+如果 adapter 单独发版（不是放在 pl-pipeline-standalone 里），在 adapter 仓库加：
+
+```yaml
+name: Contract verify (adapter side)
+
+on:
+  pull_request:
+    paths:
+      - 'adapter.yaml'
+      - 'skills/**'
+      - 'rules/**'
+      - 'templates/**'
+
+jobs:
+  cross-consumer-impact:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        consumer: [proj-a, proj-b]   # 列出所有用本 adapter 的 consumer 项目
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: this-adapter }
+      - uses: actions/checkout@v4
+        with:
+          repository: your-org/${{ matrix.consumer }}
+          path: consumer
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pyyaml
+
+      # 用本 PR 的 adapter.yaml 替换 consumer 项目的 adapter，对账
+      - name: verify against consumer ${{ matrix.consumer }}
+        run: |
+          # 假设 pl-pipeline 也是 consumer 的 submodule
+          PL_HOME="$PWD/consumer/vendor/pl-pipeline" \
+          PL_PROJECT="$PWD/consumer" \
+            bash $PL_HOME/scripts/pl-contract-verify.sh --strict
+```
+
+### 12.3 退出码语义
+
+| exit | 含义 | 推荐 CI 行为 |
+|---|---|---|
+| 0 | 全部 satisfied（含 warning，非 strict 模式） | 通过 |
+| 1 | 有 broken pact / `--strict` 下有 warning | block PR |
+| 2 | 参数错误 / 找不到 adapter 文件 | block PR（配置问题） |
+
+### 12.4 最常见的拦截场景
+
+- **adapter 默默删了一个 skill**：consumer 还在用 → broken
+- **adapter capability 加了 `removed_in: <当前版本>`**：consumer 引用未迁移 → broken
+- **adapter capability 标 `deprecated_in`**：consumer 还在用 → warn（`--strict` 才阻塞）
+- **adapter 改名 skill `foo` → `bar`**：consumer 引用 `foo` → broken（除非 capability 抽象层吸收了改名）
+
+→ 这正是 `provides.capabilities[]` 的价值：把这些"内部改名"挡在 capability 层之内，
+   不打到 consumer。详见 [§3.4 capabilities](#34-capabilities--给-consumer-一层抽象v17)。
+
+---
+
+## 13. 发布 checklist
 
 当你准备好贡献一个新 adapter 时：
 
@@ -535,6 +640,7 @@ cd "$PROJECT_ROOT"               # 由 SCRIPT_DIR 推导
 - [ ] 有至少 1 个迁移 retro 文档（`docs/retros/asset-migration/<batch>.md`）
 - [ ] CHANGELOG.md 在 v<版本> 节记录新增 adapter
 - [ ] 在 `adapters/README.md`（若有）清单中加一行
+- [ ] 若声明了 `provides.capabilities[]`：每条 capability 的 `backed_by` 真的指向存在的 skill/rule/build_command（或显式 `null` + reason）
 
 ---
 

@@ -135,3 +135,135 @@ jobs:
               sys.exit(1)
           print('✅ all Python files compile')
           "
+
+  # -----------------------------------------------------------------
+  # Job 6：v1.7 CDC broker 端到端冒烟测试
+  # 验证 trace-adapter-use → pl-contract-aggregate → pl-contract-verify 三件套
+  # 在干净环境里能跑通；并验证 verify --strict 能正确拦截 broken pact。
+  # -----------------------------------------------------------------
+  cdc-broker-smoke:
+    name: CDC broker smoke (aggregate + verify)
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pyyaml
+        run: pip install pyyaml
+
+      - name: Scenario 1 · happy path (aggregate then verify → exit 0)
+        run: |
+          set -euo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/changes" "$PROJ/pl"
+          cat > "$PROJ/.pl-adapter.yaml" <<'EOF'
+          apiVersion: pl.dev/v1
+          adapter:
+            id: nextjs-web
+            version: 0.1.0
+          build_adapter:
+            env:
+              PL_BUILD_CHECK_CMD: "echo build_ok"
+          EOF
+          cat > "$PROJ/pl/config.yaml" <<'EOF'
+          checks:
+            - id: compile_check
+              cmd: "${PL_BUILD_CHECK_CMD}"
+              required: true
+          gates:
+            D:
+              from: VERIFY
+              to: VERIFY
+              eval: all_checks.pass
+              on_failure: block
+              checks: [compile_check]
+          EOF
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-runner.sh --change ci-feat --gate D
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+            --change ci-feat --kind skill --id react-server-components \
+            --phase IMPLEMENT --by "agent:ci"
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+            --change ci-feat --kind capability --id typecheck \
+            --phase VERIFY --by "agent:ci"
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-aggregate.sh
+          test -f "$PROJ/pl/contracts/ci-feat.consumed.yaml"
+          test -f "$PROJ/pl/contracts/_registry.yaml"
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-verify.sh
+          echo "✅ scenario 1 OK"
+
+      - name: Scenario 2 · broken pact (verify must exit 1)
+        run: |
+          set -uo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/contracts"
+          cat > "$PROJ/pl/contracts/ci-broken.consumed.yaml" <<'EOF'
+          apiVersion: piao.dev/v1
+          kind: ConsumerContract
+          metadata:
+            change_id: ci-broken
+            generated_at: "2026-04-23T18:00:00Z"
+            generator: pl-contract-aggregate.sh@v1.7.0
+            source_files: []
+            event_count: 1
+          provider:
+            adapter: nextjs-web
+            versions_seen: ["0.1.0"]
+          consumed:
+            capabilities:
+              - id: smoke-probe
+                uses: 1
+                first_seen: "2026-04-23T18:00:00Z"
+                last_seen: "2026-04-23T18:00:00Z"
+          EOF
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-verify.sh
+          rc=$?
+          if [[ $rc -ne 1 ]]; then
+            echo "::error::expected exit 1 (broken pact uses backed_by:null capability), got $rc"
+            exit 1
+          fi
+          echo "✅ scenario 2 OK (verify correctly rejected broken pact, exit=$rc)"
+
+      - name: Scenario 3 · --check idempotency (aggregate twice → no diff)
+        run: |
+          set -euo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/changes" "$PROJ/pl"
+          cat > "$PROJ/.pl-adapter.yaml" <<'EOF'
+          apiVersion: pl.dev/v1
+          adapter:
+            id: nextjs-web
+            version: 0.1.0
+          build_adapter:
+            env:
+              PL_BUILD_CHECK_CMD: "echo build_ok"
+          EOF
+          cat > "$PROJ/pl/config.yaml" <<'EOF'
+          checks:
+            - id: compile_check
+              cmd: "${PL_BUILD_CHECK_CMD}"
+              required: true
+          gates:
+            D:
+              from: VERIFY
+              to: VERIFY
+              eval: all_checks.pass
+              on_failure: block
+              checks: [compile_check]
+          EOF
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-runner.sh --change ci-idem --gate D
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+            --change ci-idem --kind skill --id react-server-components \
+            --phase IMPLEMENT --by "agent:ci"
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-aggregate.sh
+          set +e
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-aggregate.sh --check
+          rc=$?
+          set -e
+          if [[ $rc -ne 0 ]]; then
+            echo "::error::expected --check exit 0 on clean state, got $rc"
+            exit 1
+          fi
+          echo "✅ scenario 3 OK (--check on clean state exits 0)"
