@@ -432,10 +432,32 @@ echo "  from: $GATE_FROM  →  to: $GATE_TO"
 echo "  eval: $GATE_EVAL"
 echo ""
 
+# v1.7：ARCHIVE 阶段自动聚合 consumer pact（CDC broker）。
+# 触发条件：gate 通过 + 此 gate 进入 ARCHIVE。
+# 失败不阻断 gate 结果，只 warn——观测层不可成为流水线的故障源。
+# 注意：必须同时覆盖正常路径 和 ITEMS_COUNT==0 早出路径（criteria-only gate，常见于
+# v1 兼容的 ARCHIVE gate 如 demo-nextjs-todo 的 gate G）。
+maybe_run_archive_aggregate() {
+  local gate_result="$1"
+  if [[ "$gate_result" == "passed" && "$GATE_TO" == "ARCHIVE" ]]; then
+    local agg_script="$PL_HOME/scripts/pl-contract-aggregate.sh"
+    if [[ -x "$agg_script" ]]; then
+      echo ""
+      echo "${DIM}─── auto: pl-contract-aggregate --change $CHANGE ───${NC}"
+      if "$agg_script" --change "$CHANGE" 2>&1 | sed 's/^/  /'; then
+        echo "  ${DIM}(remember to: git add pl/contracts/${CHANGE}.consumed.yaml pl/contracts/_registry.yaml)${NC}"
+      else
+        log_warn "auto-aggregate failed (non-blocking); run manually: $agg_script --change $CHANGE"
+      fi
+    fi
+  fi
+}
+
 ITEMS_COUNT=$(echo "$RESOLVED" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["items"]))')
 if [[ "$ITEMS_COUNT" -eq 0 ]]; then
   log_warn "gate '$GATE' has no checks defined (v1 criteria only)"
   trace_gate_end "$GATE" "passed" '{"reason":"no_checks_defined"}'
+  maybe_run_archive_aggregate "passed"
   if $JSON_OUT; then
     jq -nc --arg gate "$GATE" '{gate:$gate,result:"passed",checks:[],note:"v1 criteria only, no machine checks"}'
   fi
@@ -486,21 +508,7 @@ trace_gate_end "$GATE" "$GATE_RESULT" "$(jq -nc --arg eval "$GATE_EVAL" \
   --argjson pass "$PASS" --argjson fail "$FAIL" --argjson skip "$SKIP" \
   '{eval:$eval,pass:$pass,fail:$fail,skip:$skip}')"
 
-# v1.7：ARCHIVE 阶段自动聚合 consumer pact（CDC broker）。
-# 触发条件：gate 通过 + 此 gate 进入 ARCHIVE。
-# 失败不阻断 gate 结果，只 warn——观测层不可成为流水线的故障源。
-if [[ "$GATE_RESULT" == "passed" && "$GATE_TO" == "ARCHIVE" ]]; then
-  AGG_SCRIPT="$PL_HOME/scripts/pl-contract-aggregate.sh"
-  if [[ -x "$AGG_SCRIPT" ]]; then
-    echo ""
-    echo "${DIM}─── auto: pl-contract-aggregate --change $CHANGE ───${NC}"
-    if "$AGG_SCRIPT" --change "$CHANGE" 2>&1 | sed 's/^/  /'; then
-      echo "  ${DIM}(remember to: git add pl/contracts/${CHANGE}.consumed.yaml pl/contracts/_registry.yaml)${NC}"
-    else
-      log_warn "auto-aggregate failed (non-blocking); run manually: $AGG_SCRIPT --change $CHANGE"
-    fi
-  fi
-fi
+maybe_run_archive_aggregate "$GATE_RESULT"
 
 echo ""
 echo "${BOLD}━━━ Summary ━━━${NC}"
