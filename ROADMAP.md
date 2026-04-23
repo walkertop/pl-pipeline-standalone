@@ -33,20 +33,17 @@
 | A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag | 10 分钟 | 无 | ✅ 已完成（pl-v1.3.2） |
 | **v1.5** | **核心资产迁移** | spec-normalizer 等 11 个通用资产脱敏迁到独立仓 + 新 adapter-kotlin | 1 天 | 无 | ✅ 已完成（pl-v1.5.0） |
 | — | 辩证方法论文档 | 让模糊需求在格式化工具里有容身之地 | 已完成 | — | ✅ `docs/guides/working-with-fuzzy-intent.md` |
-| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 天 | **v1.5 ✅** | 🟡 **下一步优先** |
-| F | 扩充 adapter 生态（android / kmp-kuikly / go） | 证明栈级 adapter 机制可复用 | 4–5 天 | E' | 🟡 待做 |
-| G | v0.2 CLI 打包（`pl init`）| 降低使用门槛 30 秒上手 | 5–7 天 | E' | 🟡 待做 |
-| H | retro-miner 真实 trace 挖掘链路（B→C→D） | 闭合"观察-挖掘-反馈"飞轮 | 2–3 天 | E' | 🟡 待做 |
+| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 26min | **v1.5 ✅** | ✅ 已完成（Pomodoro Timer v0.1） |
+| F | 扩充 adapter 生态（android / kmp-kuikly / go） | 证明栈级 adapter 机制可复用 | 4–5 天 | E' ✅ | 🟡 待做 |
+| G | v0.2 CLI 打包（`pl init`）| 降低使用门槛 30 秒上手 | 5–7 天 | E' ✅ | 🟡 待做 |
+| H | retro-miner 真实 trace 挖掘链路（B→C→D） | 闭合"观察-挖掘-反馈"飞轮 | 2–3 天 | E' ✅ | 🟡 待做 |
 
-### E' 场景候选（v1.5 已完成，现可拍板）
+### E' 已完成 ✅
 
-| 候选 | 优点 | 缺点 | 推荐 |
-|------|------|------|------|
-| **新建 next.js todo app**（或升级 `examples/demo-nextjs-todo`）| 最干净；已有 adapter-nextjs-web；能验证整条链路 | 需要一点真实代码工作量 | ⭐⭐⭐⭐⭐ |
-| 自举：给 pl-pipeline 自己加小功能 | 工具链现成 | 自举验证说服力弱 | ⭐⭐⭐ |
-| 新建 markdown parser CLI | 极干净 | 没有现成 adapter | ⭐⭐ |
-
-**用户已明确否决**："不选 KuiklyPolyCity"。
+**场景**：新建 Next.js 番茄时钟 app（Pomodoro Timer v0.1），完整走完 proposal → plan → implement → verify → archive 六步。
+**结论**：v1.5.0 核心资产栈通过全链路验证，3/5 目标达成，2 项需后续用 orchestrator 补验。
+**Retro**：[`docs/retros/v1.5-real-run/retro.md`](./docs/retros/v1.5-real-run/retro.md)
+**改进建议**：3 条 P2/P3 已归档到 v1.6 backlog（stages_override / trace-emit 示例 / adapter-install 提示）。
 
 ---
 
