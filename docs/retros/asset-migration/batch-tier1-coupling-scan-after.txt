@@ -1,0 +1,66 @@
+=== Tier 1 资产迁移 · 耦合点扫描（迁移后）===
+生成时间: 2026-04-23
+目标路径:
+  - assets/pl/rules/git-commit.md
+  - adapters/adapter-kotlin/rules/kotlin-coding-standards.md
+  - adapters/adapter-kotlin/rules/kotlinx-serialization.md
+  - adapters/adapter-kotlin/skills/kotlin-code-review/SKILL.md
+扫描方式: 同迁移前
+
+--- 1) assets/pl/rules/git-commit.md ---------------------------------
+grep pattern='KuiklyPolyCity|daoju|腾讯|PolyCity|openspec|道聚城':
+  无匹配
+
+grep pattern='kuikly|Kuikly' (case-insensitive):
+  无匹配
+
+frontmatter migrated_from: KuiklyPolyCity@feature/caleb/agentic   ← 合法追溯
+Footnote 节说明了脱敏变化                                          ← 合法
+
+结论: ✅ 无 real coupling
+
+--- 2) adapters/adapter-kotlin/rules/kotlin-coding-standards.md ------
+grep pattern='KuiklyPolyCity|daoju|腾讯|PolyCity|openspec|道聚城':
+  无匹配
+
+grep pattern='kuikly|Kuikly':
+  无匹配（console 日志表述已改为"项目约定的 Logger 抽象"）
+
+frontmatter migrated_from                                          ← 合法追溯
+Footnote 节说明脱敏变化                                            ← 合法
+
+结论: ✅ 无 real coupling
+
+--- 3) adapters/adapter-kotlin/rules/kotlinx-serialization.md --------
+grep pattern='KuiklyPolyCity|daoju|腾讯|PolyCity|openspec|道聚城':
+  无匹配
+
+grep pattern='kuikly|Kuikly':
+  无匹配
+
+Footnote 节说明"匈牙利命名法 强约束 → 选择之一"改动                ← 合法
+
+结论: ✅ 无 real coupling
+
+--- 4) adapter-kotlin/skills/kotlin-code-review/SKILL.md -------------
+grep pattern='KuiklyPolyCity|daoju|腾讯|PolyCity|openspec|道聚城':
+  无匹配（"腾讯 Kotlin 代码规范" → "Kotlin 官方规范 + 业界最佳实践"）
+
+grep pattern='kuikly|Kuikly':
+  无匹配
+
+requires: [kotlin-coding-standards@>=1.0.0]                         ← 栈级依赖
+adapter-kotlin/rules/* 引用                                         ← 合法（同 adapter 内）
+
+结论: ✅ 无 real coupling
+
+=== 总览 ===
+硬耦合点: 0（合法 frontmatter.migrated_from 4 处）
+软耦合点: 0
+待迁内容: kotlin-code-review/references/*.md 共 12 个（延后，许可存疑）
+
+=== 分层归属 ===
+assets/pl/rules/git-commit.md                 ← generic（conventional commits 普适）
+adapter-kotlin/rules/kotlin-coding-standards  ← stack-specific: kotlin
+adapter-kotlin/rules/kotlinx-serialization    ← stack-specific: kotlin
+adapter-kotlin/skills/kotlin-code-review      ← stack-specific: kotlin

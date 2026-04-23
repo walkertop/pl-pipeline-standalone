@@ -1,0 +1,58 @@
+=== Tier 1 资产迁移 · 耦合点扫描（迁移前）===
+生成时间: 2026-04-23
+源路径: /Users/guobin/Developer/djc1/daojuROOT/KuiklyPolyCity/.codebuddy/{rules,skills}/
+扫描方式: search_content pattern='KuiklyPolyCity|kuikly-polycity|daoju|腾讯|PolyCity|polyCity|kuikly|Kuikly|openspec|道聚城'
+
+--- 1) rules/git-commit-rules.md ------------------------------------
+Line 64: | `chore` | 构建/工具 | `chore(gradle): update Kuikly dependency` |
+  分类: 硬耦合（栈名）
+  处理: 示例改为 `chore(deps): bump framework to v2.3`
+
+其他隐性耦合:
+  - Line 89: `Closes: openspec/changes/add-blindbox-feature` (openspec 路径 + 业务词 blindbox)
+  - Line 99: `MIGRATION_LOG.md` / `MIGRATION_COMPLETE.md` 文件名 (项目专属)
+  - Line 118: `OpenSpec Change:` 字段名
+  分类: 硬耦合（路径/字段）
+  处理: openspec → pl/changes；迁移记录章节改为更通用的"变更记录关联"
+
+--- 2) rules/kotlin-coding-standards.md -----------------------------
+Line 168: // ✅ 使用 console 对象（Kuikly 标准）
+  分类: 硬耦合（框架专属 Logger）
+  处理: 改为抽象 "项目约定的 Logger 抽象"，举多种 Logger 实例
+
+其他隐性耦合:
+  - 1.x 节 "Module 常量: 使用 companion object 中的 MODULE_NAME 常量"
+    分类: 软耦合（特定框架的 Module 概念）
+    处理: 去除 MODULE_NAME 表述，保留通用的 TAG + companion object
+  - 序列化章节与 serialization-rules.md 重复
+    分类: 内容冗余
+    处理: 从本 rule 中移除序列化示例（保持单一职责）
+
+--- 3) rules/serialization-rules.md ---------------------------------
+无直接硬耦合词（grep 无匹配）
+
+但存在软耦合:
+  - Line 132-157: "匈牙利命名法"作为强约束
+    分类: 软耦合（特定 API 风格）
+    处理: 章节改为"命名与字段映射"，匈牙利法作为"选择之一"而非钦定
+  - 示例类名 ItemData / OrderData / DetailData / ApiResponse
+    分类: 通用（DTO 常用名）
+    处理: 保留
+
+--- 4) skills/kotlin-code-review/SKILL.md ---------------------------
+Line 3: description: 基于腾讯 Kotlin 代码规范对 Kotlin 代码进行全面审查...
+  分类: 硬耦合（组织名）
+  处理: 改为 "基于 Kotlin 官方规范 + 业界最佳实践"
+
+其他隐性耦合:
+  - Line 10: "基于项目 kotlin-standard 规范" (指向源项目内部规范文件)
+    分类: 软耦合
+    处理: 改为指向本独立仓的 adapter-kotlin/rules/kotlin-coding-standards.md
+  - references/*.md 共 12 个参考文件
+    分类: 未迁（内容是对 Kotlin 官方文档的复述，许可存疑）
+    处理: 暂不迁，SKILL.md 自包含十大维度审查指引已足够
+
+=== 统计 ===
+硬耦合点: 3 处（git/kotlin-std/kotlin-review）
+软耦合点: 5 处
+全文件无耦合: 1 个（serialization-rules.md 的词法扫描）

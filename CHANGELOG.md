@@ -20,6 +20,81 @@
 
 ---
 
+## [1.5.0-rc.1] — 2026-04-23 · Tier 1 资产 + D5 升级文档
+
+v1.5 第三阶段：**Tier 1 四个资产迁移 + 新建 adapter-kotlin + 作者指南**。
+至此 v1.5 的核心资产栈（assets/pl/* + adapters/adapter-kotlin）完整可分发。
+
+### ✨ Added · Tier 1 批量迁入
+
+| # | 资产 | 类型 | 分层归属 | 源行数 → 目标行数 | 实质耦合 |
+|---|------|------|---------|-----------------|---------|
+| T1 | `git-commit` | rule | generic | 122 → 186 行 | 0 |
+| T2 | `kotlin-coding-standards` | rule | adapter-kotlin | 188 → 202 行 | 0 |
+| T3 | `kotlinx-serialization` | rule | adapter-kotlin | 167 → 174 行 | 0 |
+| T4 | `kotlin-code-review` | skill | adapter-kotlin | 385 → 318 行 | 0 |
+| 合计 | | | | **862 → 880 行** | **0 real coupling** |
+
+### 🆕 新增 adapter：adapter-kotlin
+
+- 首个**栈级基础 adapter**（不绑定 UI 框架）
+- 可被 `adapter-android` / `adapter-kmp-kuikly` 等未来 adapter 通过 `requires` 叠加
+- 完整产物：
+  - `adapter.yaml`（gradle 构建基座，含 contract / expected_files）
+  - `README.md`
+  - `rules/`（kotlin-coding-standards + kotlinx-serialization）
+  - `skills/kotlin-code-review/SKILL.md`（P0/P1/P2 三档审查，10 维度）
+  - `scripts/{build,verify,lint}.sh`（优雅降级，detekt/ktlint 缺失时不报错）
+
+### 📘 D5 · 作者指南与升级文档
+
+- **[`docs/guides/adapter-authoring.md`](./docs/guides/adapter-authoring.md)**
+  - 三个判断：何时该写 adapter
+  - 标准目录结构 + adapter.yaml 规范
+  - rules / skills / agents / scripts 写作规范
+  - 脱敏检查清单（10 项）
+  - 以 adapter-kotlin 为例的走查
+  - 4 个常见陷阱 + 12 条发布 checklist
+  - 附录：与 assets/pl 分层关系速查 + 3 个参考实现
+
+- **[`docs/migration/v1.4-to-v1.5.md`](./docs/migration/v1.4-to-v1.5.md)**
+  - 变化一览（新增文件与目录 / 版本总览）
+  - 升级步骤（3 层加载策略 + adapter 安装）
+  - KuiklyPolyCity 用户迁移对照表（11 项资产映射）
+  - Breaking 与兼容性（3 个 minor breaking：gradle 命令外化 / 文件名归一化 / 七阶段）
+  - 新功能速览 + 验证脚本 + 5 条 FAQ + 回退策略
+
+### 🔧 关键抽象动作
+
+- `git-commit`：`chore(gradle): update Kuikly dependency` 示例改为 `chore(deps): bump framework to v2.3`；迁移记录章节去项目专属化；Scope 表改为"模式 + 示例"；Type 扩充 `ci` / `build`
+- `kotlin-coding-standards`：`console` 专属 Logger 抽象为"项目约定 Logger"，举 slf4j / android.util.Log / console 三例；序列化示例移至独立 rule 避免重复
+- `kotlinx-serialization`：匈牙利命名法从"强约束"改为"选择之一"，新增选择标准
+- `kotlin-code-review`：`基于腾讯 Kotlin 代码规范` 改为 `基于 Kotlin 官方规范 + 业界最佳实践`；references/*.md 12 文件暂不迁（内容是官方文档复述，许可存疑）
+
+### 📋 迁移证据
+
+- `docs/retros/asset-migration/batch-tier1-coupling-scan-before.txt` — 迁移前扫描（硬耦合 3 / 软耦合 5）
+- `docs/retros/asset-migration/batch-tier1-coupling-scan-after.txt` — 迁移后扫描（0 耦合）
+- `docs/retros/asset-migration/batch-tier1-migration.md` — 详细对比 + 分层决策 + 关键决策记录 + 经验沉淀
+
+### 📊 v1.5 累计状态
+
+| 阶段 | 产物 | 状态 |
+|------|------|------|
+| D1 | 三目录骨架 + 脱敏指南 | ✅ |
+| D2 | spec-normalizer 样本迁移 | ✅ |
+| D3 | 6 个核心资产批量迁移 | ✅ |
+| Tier 1 | git-commit + 3 kotlin 资产 + adapter-kotlin | ✅ |
+| D4 | KuiklyPolyCity override 回测 | ⏭ 用户选择跳过 |
+| D5 | adapter-authoring + v1.4→v1.5 指南 | ✅ |
+| D6 | 打正式版 `pl-v1.5.0` | 🔜 |
+
+**v1.5 RC 完成**：assets/pl/ 拥有 2 skills + 4 rules + 2 agents；新增 adapter-kotlin 含 2 rules + 1 skill + 3 scripts。
+
+---
+
+
+
 ## [1.5.0-beta] — 2026-04-23 · Core Assets Migration · D3 批量
 
 v1.5 第二阶段：**6 个核心资产一次性批量迁移**。

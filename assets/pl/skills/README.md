@@ -34,6 +34,9 @@ requires: [<other-skill-id@ver>]  # 可选
 | `spec-normalizer/` | 从 KuiklyPolyCity 脱敏迁入 | ✅ D2（v1.5.0-alpha）|
 | `finalization-template/` | 从 KuiklyPolyCity 脱敏迁入 | ✅ D3 |
 
+> **栈级 skill（Kotlin 相关）** 已迁移至 `adapters/adapter-kotlin/skills/`：
+> - `kotlin-code-review/`（Kotlin 代码审查，需叠加 adapter-kotlin）
+
 ## 脱敏硬规则
 
 所有从项目迁入的 skill 必须通过脱敏检查：**不能出现特定项目路径、业务词、钦定技术栈**。

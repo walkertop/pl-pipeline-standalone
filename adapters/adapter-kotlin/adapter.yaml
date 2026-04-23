@@ -1,0 +1,96 @@
+apiVersion: pl.dev/v1
+kind: Adapter
+
+metadata:
+  id: kotlin
+  name: Kotlin 通用项目适配器
+  description: >
+    面向 Kotlin 项目（JVM / KMP / Android / Native）的 pl-pipeline 适配器。
+    提供 Kotlin 编码规范、kotlinx.serialization 规范、kotlin-code-review skill，
+    以及 gradle 构建集成。不绑定具体 UI 框架（可与 adapter-android、
+    adapter-kmp-kuikly 等栈级适配器组合使用）。
+  version: 0.1.0
+  compatible_pl: ">=0.1.0-mvp <1.0.0"
+  license: Apache-2.0
+  homepage: https://github.com/walkertop/pl-pipeline-standalone
+  authors:
+    - name: walker
+      email: bin5211bin@gmail.com
+  detect:
+    - file_exists: "settings.gradle.kts"
+    - file_exists: "settings.gradle"
+    - file_exists: "build.gradle.kts"
+    - file_exists: "build.gradle"
+    - file_exists: "pom.xml"  # Maven Kotlin 项目
+
+provides:
+  skills:
+    - id: kotlin-code-review
+      path: "skills/kotlin-code-review/SKILL.md"
+      triggers:
+        - "kotlin 代码审查"
+        - "审查 kotlin 代码"
+        - "kotlin code review"
+        - "review kotlin code"
+      description: "基于 Kotlin 官方规范 + 业界最佳实践做全面代码审查"
+  rules:
+    - id: kotlin-coding-standards
+      path: "rules/kotlin-coding-standards.md"
+      scope: always
+      description: "Kotlin 编码规范（命名/类型安全/不可变/协程等）"
+    - id: kotlinx-serialization
+      path: "rules/kotlinx-serialization.md"
+      scope: on-demand
+      description: "kotlinx.serialization 使用规范（@Serializable / 默认值 / @Contextual）"
+  scripts:
+    build: "scripts/build.sh"
+    verify: "scripts/verify.sh"
+    lint: "scripts/lint.sh"
+  build_adapter:
+    type: gradle
+    commands:
+      compile_check:
+        cmd: "./gradlew compileKotlin --quiet"
+        success_pattern: "BUILD SUCCESSFUL"
+        failure_patterns:
+          - "BUILD FAILED"
+          - "e: .*: .*"        # Kotlin 编译错误形如 "e: File.kt:12: ..."
+        timeout_sec: 300
+      lint:
+        cmd: "./gradlew detekt --continue"
+        success_pattern: "BUILD SUCCESSFUL"
+        timeout_sec: 180
+      test:
+        cmd: "./gradlew test --continue"
+        timeout_sec: 600
+      full_build:
+        cmd: "./gradlew build --continue"
+        timeout_sec: 900
+
+requires:
+  tools:
+    - name: java
+      min_version: "17"
+      install_hint: "brew install openjdk@17 或 sdkman install java 17"
+    - name: gradle
+      min_version: "8.0"
+      install_hint: "项目自带 gradlew 即可，无需全局安装"
+  files:
+    - path: "settings.gradle.kts"
+      alt_paths: ["settings.gradle", "pom.xml"]
+
+contract:
+  expected_files:
+    - path: build.gradle.kts
+      alt_paths: ["build.gradle", "pom.xml"]
+      severity: error
+    - path: gradle/wrapper/gradle-wrapper.properties
+      severity: warn
+      note: "推荐使用 gradle wrapper，避免团队 gradle 版本不一致"
+    - path: gradle.properties
+      severity: warn
+      note: "包含 JVM 参数 / KMP 配置等关键设定"
+
+piao_emit:
+  on_stages: [VERIFY, ARCHIVE]
+  urn_namespace: "urn:piao:artifact:pl:kotlin"

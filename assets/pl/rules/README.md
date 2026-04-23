@@ -40,3 +40,8 @@ fix_hint: "..."
 | `piao-pipeline-discipline.md` | 从 KuiklyPolyCity 脱敏迁入 | ✅ D3 |
 | `acceptance-criteria.md` | 同上 | ✅ D3 |
 | `build-verification.md` | 同上（gradle 命令抽象化完成）| ✅ D3 |
+| `git-commit.md` | 同上（Scope 表通用化，path 改 `pl/changes`）| ✅ Tier 1 |
+
+> **栈级 rule（Kotlin 相关）** 已迁移至 `adapters/adapter-kotlin/rules/`：
+> - `kotlin-coding-standards.md`（Kotlin 通用编码规范）
+> - `kotlinx-serialization.md`（kotlinx.serialization 使用规范）
