@@ -267,3 +267,58 @@ jobs:
             exit 1
           fi
           echo "✅ scenario 3 OK (--check on clean state exits 0)"
+
+      # ---------------------------------------------------------------
+      # Scenario 4：criteria-only gate (v1 兼容 gate, 无 checks 字段)
+      # 必须仍然触发 ARCHIVE auto-aggregate hook。
+      # 这是 A1 dogfood 抓到的 bug 的回归测试——
+      # pl-runner 在 ITEMS_COUNT==0 时早出，曾绕过 maybe_run_archive_aggregate。
+      # 修复见 commit a5f1e26（fix(cdc): pl-runner ARCHIVE 钩子被绕过）。
+      # 不加这个 fixture，下次重构 pl-runner 极易 silently 回归。
+      # ---------------------------------------------------------------
+      - name: Scenario 4 · criteria-only ARCHIVE gate triggers auto-aggregate
+        run: |
+          set -euo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/changes" "$PROJ/pl"
+          cat > "$PROJ/.pl-adapter.yaml" <<'EOF'
+          apiVersion: pl.dev/v1
+          adapter:
+            id: nextjs-web
+            version: 0.1.0
+          EOF
+          # 关键点：gate G 故意只写 criteria, 不写 checks——模拟 demo 的 ARCHIVE gate
+          cat > "$PROJ/pl/config.yaml" <<'EOF'
+          gates:
+            G:
+              from: OBSERVE
+              to: ARCHIVE
+              eval: all_checks.pass
+              on_failure: block
+              criteria:
+                - "知识沉淀完成"
+          EOF
+          # 先打一个 adapter.use 事件，让 aggregate 有东西可聚
+          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+            --change ci-criteria --kind skill --id react-server-components \
+            --phase ARCHIVE --by "agent:ci"
+          # 触发 criteria-only gate G。期望：
+          #   1. gate 通过（exit 0）
+          #   2. auto-aggregate 自动跑（不被 ITEMS_COUNT==0 早出绕过）
+          #   3. pl/contracts/ 出现 pact + registry
+          OUT=$(PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-runner.sh --change ci-criteria --gate G)
+          echo "$OUT"
+          if ! echo "$OUT" | grep -q "auto: pl-contract-aggregate"; then
+            echo "::error::criteria-only gate did NOT trigger auto-aggregate (regression of A1 bug)"
+            exit 1
+          fi
+          if [[ ! -f "$PROJ/pl/contracts/ci-criteria.consumed.yaml" ]]; then
+            echo "::error::expected pl/contracts/ci-criteria.consumed.yaml to exist"
+            ls -la "$PROJ/pl/contracts/" 2>&1 || true
+            exit 1
+          fi
+          if [[ ! -f "$PROJ/pl/contracts/_registry.yaml" ]]; then
+            echo "::error::expected pl/contracts/_registry.yaml to exist"
+            exit 1
+          fi
+          echo "✅ scenario 4 OK (criteria-only gate auto-aggregate fired, A1 bug regression test passes)"
