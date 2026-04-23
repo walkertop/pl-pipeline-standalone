@@ -116,6 +116,64 @@ provides:
           url: "/api/v1/users"
           expect_status: 401
 
+  # v1.7 (CDC)：consumer 应当对 capability 而非具体 skill/build_command 名签约。
+  # 这些是 adapter 对外的"能力承诺"——内部资产可改名/重组而不破坏 consumer。
+  # 详见 docs/guides/adapter-authoring.md 第 11 节。
+  capabilities:
+    # ---- build chain（自动化检查）----
+    - id: typecheck
+      backed_by:
+        build_command: compile_check
+      since: "0.1.0"
+    - id: lint
+      backed_by:
+        build_command: lint
+      since: "0.1.0"
+    - id: test
+      backed_by:
+        build_command: test
+      since: "0.1.0"
+    - id: full-build
+      backed_by:
+        build_command: full_build
+      since: "0.1.0"
+
+    # ---- 语义能力（skill 支撑）----
+    - id: dependency-injection
+      backed_by:
+        skill: fastapi-dependency-injection
+      since: "0.1.0"
+    - id: data-validation
+      backed_by:
+        skill: pydantic-v2-patterns
+      since: "0.1.0"
+    - id: async-orm
+      backed_by:
+        skill: sqlalchemy-async
+      since: "0.1.0"
+    - id: async-test-harness
+      backed_by:
+        skill: pytest-async
+      since: "0.1.0"
+
+    # ---- 语义能力（rule 支撑）----
+    - id: strict-typing
+      backed_by:
+        rule: python-typing-strict
+      since: "0.1.0"
+    - id: api-error-handling
+      backed_by:
+        rule: api-error-handling
+      since: "0.1.0"
+
+    # ---- smoke probe（fastapi 真支持，与 nextjs 不同）----
+    - id: smoke-probe
+      backed_by:
+        # fastapi 进程启动可控、端点健康，可跑 HTTP probe；不需要 backed_by 单一资产，
+        # 由 build_adapter.smoke.probes 整体支撑。这里用占位指向 build_adapter 段。
+        config: "build_adapter.smoke.probes"
+      since: "0.1.0"
+
 requires:
   tools:
     - name: python3

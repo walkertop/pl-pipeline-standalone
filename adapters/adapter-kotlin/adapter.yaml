@@ -67,6 +67,55 @@ provides:
         cmd: "./gradlew build --continue"
         timeout_sec: 900
 
+  # v1.7 (CDC)：稳定的对外能力承诺，与具体 skill/build_command 名解耦。
+  # kotlin adapter 是"通用 Kotlin 项目"层，能力面相对小，主要由 build chain 撑起。
+  capabilities:
+    # ---- build chain ----
+    - id: typecheck
+      backed_by:
+        build_command: compile_check
+      since: "0.1.0"
+    - id: lint
+      backed_by:
+        build_command: lint
+      since: "0.1.0"
+    - id: test
+      backed_by:
+        build_command: test
+      since: "0.1.0"
+    - id: full-build
+      backed_by:
+        build_command: full_build
+      since: "0.1.0"
+
+    # ---- 语义能力（skill / rule 支撑）----
+    - id: code-review
+      backed_by:
+        skill: kotlin-code-review
+      since: "0.1.0"
+    - id: coding-standards
+      backed_by:
+        rule: kotlin-coding-standards
+      since: "0.1.0"
+    - id: serialization-conventions
+      backed_by:
+        rule: kotlinx-serialization
+      since: "0.1.0"
+
+    # ---- 显式声明不支持（避免静默） ----
+    - id: smoke-probe
+      backed_by: null
+      since: "0.1.0"
+      reason: |
+        kotlin adapter 是通用层，不绑定具体运行时（JVM service / Android app / KMP）。
+        smoke probe 应由栈级 adapter（如 adapter-android、adapter-ktor-server）提供。
+    - id: dependency-injection
+      backed_by: null
+      since: "0.1.0"
+      reason: |
+        kotlin 没有官方 DI 标准。Koin / Hilt / 手写 constructor injection 各有适用场景。
+        consumer 若需要 DI 能力，请显式选用栈级 adapter（如 adapter-android 提供 hilt）。
+
 requires:
   tools:
     - name: java
