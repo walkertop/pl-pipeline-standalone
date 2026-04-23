@@ -7,7 +7,34 @@
 
 ---
 
-## [1.3.2-alpha] — 2026-04-23 · Dashboard Live Reload
+## [1.3.2-alpha.2] — 2026-04-23 · snapshot-lost 修复 + 用户文档
+
+### 🐛 Fixed
+
+- **snapshot 丢失 bug（严重）**：v1.3.2-alpha 里 `tail_jsonl_watcher` 的 snapshot 由共享 watcher 线程广播给当前所有订阅者，变量 `snapshot_sent` 是 watcher 级别而非订阅者级别。第二个及以后的订阅者都收不到初始全量，导致 Dashboard 多开浏览器 tab 时部分 tab 只显示空壳。
+  - 修复：Broadcaster 引入 `snapshot_fn` 字段，`subscribe()` 时对**每个新订阅者**独立生成并发送当前全量 snapshot；watcher 只负责后续 `append / reset / missing`。
+  - 影响面：所有 change 详情页和 index 首页的 live 订阅。
+  - 复现命令：连跑两次 `curl -N /_events/stream?change=<id>`；修复前第二次只见 `hello`，修复后每次都能收到完整 snapshot。
+
+- **ConnectionResetError 噪音**：浏览器切页/关 tab 时大量 "Connection reset by peer" traceback 污染 server log，掩盖真实错误。
+  - 修复：重载 `ThreadingHTTPServer.handle_error`，对 `ConnectionResetError / BrokenPipeError` 静音；设 `PL_DASHBOARD_VERBOSE=1` 可恢复。
+
+- **index_watcher 启动多推一条相同 updated**：`last_sig=None` 导致首次循环必然 publish；snapshot 职责移出后应初始化为当前 sig。
+  - 修复：新增 `_compute_index_sig()`，watcher 启动时即以当前状态初始化。
+
+### 📝 Docs
+
+- 新增用户使用文档：[`docs/dashboard-guide.md`](./docs/dashboard-guide.md)
+  - 30 秒上手 / 三种启动姿势 / 视图详解 / live badge 四态 / 降级策略 / 常见问题 5 条
+  - 引用 `docs/retros/evidence-2026-04-v1.3.2/change-live.png` 作为效果示例
+
+### 🧪 验证
+
+- 两个连续订阅者均收到完整 snapshot
+- 浏览器切页时 server log 干净
+- E2E 手测：3 个 change 的卡片 / change 详情页 info-cards / timeline 均正确渲染
+
+---
 
 **主题：Dashboard 从静态快照升级为实时推送。**
 

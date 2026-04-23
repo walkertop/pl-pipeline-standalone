@@ -66,11 +66,17 @@ class Broadcaster:
 
     订阅者通过 subscribe() 拿到一个 queue，watcher 线程把新事件 put 进所有 queue。
     订阅者关闭连接时调用 unsubscribe()，最后一个订阅者离开后 watcher 自动停。
+
+    Snapshot 协议（v1.3.2 fix #1）：
+      - 每个新订阅者在 subscribe() 时都要收到一次当前全量 snapshot
+      - 因此 Broadcaster 需要一个 snapshot_fn 可被随时调用生成当前快照
+      - watcher 只负责 publish "append/reset/missing"，不再发 snapshot
     """
 
-    def __init__(self, name, watcher_fn):
+    def __init__(self, name, watcher_fn, snapshot_fn=None):
         self.name = name
         self.watcher_fn = watcher_fn
+        self.snapshot_fn = snapshot_fn  # Optional[Callable[[], dict | None]]
         self.subscribers = []        # list[queue.Queue]
         self.lock = threading.Lock()
         self.thread = None
@@ -78,9 +84,22 @@ class Broadcaster:
 
     def subscribe(self):
         q = queue.Queue(maxsize=1024)
+        # 先把本订阅者加到订阅列表，再给 ta 推一次初始 snapshot（仅对这个 queue），
+        # 这样既不会错过初始状态，也不会错过后续 watcher 的 append。
         with self.lock:
             self.subscribers.append(q)
             need_start = self.thread is None or not self.thread.is_alive()
+        # 给新订阅者独家推 snapshot（仅在有 snapshot_fn 的 Broadcaster 上）
+        if self.snapshot_fn is not None:
+            try:
+                snap = self.snapshot_fn()
+                if snap is not None:
+                    try:
+                        q.put_nowait(snap)
+                    except queue.Full:
+                        pass
+            except Exception:
+                traceback.print_exc()
         if need_start:
             self.stop_flag.clear()
             self.thread = threading.Thread(
@@ -119,71 +138,102 @@ class Broadcaster:
 # ─────────────────────────────────────────────────────────────────────────────
 # Watcher 函数
 # ─────────────────────────────────────────────────────────────────────────────
-def tail_jsonl_watcher(bcast, stop_flag, path, change_id):
-    """轮询式 tail — 追加新行就 publish {event:'append', lines:[json...]}.
+def _read_jsonl_events(path):
+    """把文件全量读为 (events: list, size_bytes: int)；读不到返回 (None, 0)。"""
+    if not path.exists():
+        return None, 0
+    try:
+        raw = path.read_bytes()
+    except Exception:
+        return None, 0
+    events = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(json.loads(line.decode("utf-8")))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+    return events, len(raw)
 
-    支持：
-      - 初始快照：订阅时先发 {event:'snapshot', events:[...]}
-      - 文件不存在/消失：发 {event:'missing'}
-      - 文件被截断 / rotate：发 {event:'reset'} 并重新读取
+
+def make_tail_snapshot_fn(path, change_id):
+    """为单个 change 构造 snapshot 生成函数；供 Broadcaster.snapshot_fn 使用。
+
+    返回 None 表示文件不存在 / 空（订阅者会只等 append）。
     """
+    def snapshot():
+        events, size = _read_jsonl_events(path)
+        if events is None:
+            return {"event": "missing", "change_id": change_id}
+        return {
+            "event": "snapshot",
+            "change_id": change_id,
+            "events": events,
+            "pos": size,
+        }
+    return snapshot
+
+
+def tail_jsonl_watcher(bcast, stop_flag, path, change_id):
+    """轮询式 tail — 只管 publish append / reset / missing。
+
+    snapshot 由 Broadcaster.snapshot_fn 在订阅时针对单个订阅者推送（v1.3.2 fix #1）。
+    """
+    # 轮询起点：以文件当前 size 为 pos，避免把"已经被 snapshot 覆盖的历史" 再当 append 重发
     pos = 0
     last_size = -1
     last_mtime = 0
-    snapshot_sent = False
+    missing_announced = False
+
+    # 初始化：记录当前 size（如果文件存在）
+    if path.exists():
+        try:
+            st = path.stat()
+            pos = st.st_size
+            last_size = st.st_size
+            last_mtime = st.st_mtime
+        except Exception:
+            pass
 
     while not stop_flag.is_set() and not SHUTDOWN.is_set():
         try:
             if not path.exists():
-                if snapshot_sent:
-                    bcast.publish({"event": "missing"})
-                    snapshot_sent = False
+                if not missing_announced and last_size != -1:
+                    bcast.publish({"event": "missing", "change_id": change_id})
+                    missing_announced = True
                     pos = 0
                     last_size = -1
                 time.sleep(0.5)
                 continue
+            # 文件（重新）出现
+            if missing_announced:
+                # 重置并让客户端重拉 snapshot
+                bcast.publish({"event": "reset", "change_id": change_id})
+                missing_announced = False
+                pos = 0
+                last_size = -1
 
             st = path.stat()
             size = st.st_size
             mtime = st.st_mtime
 
-            # 初始快照
-            if not snapshot_sent:
-                with path.open("r", encoding="utf-8") as f:
-                    content = f.read()
-                events = []
-                for line in content.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        events.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        pass
-                bcast.publish({
-                    "event": "snapshot",
-                    "change_id": change_id,
-                    "events": events,
-                    "pos": len(content.encode("utf-8")),
-                })
-                pos = len(content.encode("utf-8"))
-                last_size = size
-                last_mtime = mtime
-                snapshot_sent = True
-                time.sleep(0.5)
-                continue
-
-            # 文件被截断 / rotate
-            if size < last_size:
-                bcast.publish({"event": "reset"})
-                snapshot_sent = False
+            # 首次进入（last_size == -1，但文件此刻存在）：从 0 开始读并推 reset + 全量
+            if last_size < 0:
+                bcast.publish({"event": "reset", "change_id": change_id})
                 pos = 0
-                last_size = -1
-                continue
+                last_size = 0
+
+            # 被截断 / rotate
+            if size < last_size:
+                bcast.publish({"event": "reset", "change_id": change_id})
+                pos = 0
+                last_size = 0
 
             # 有新内容
             if size > last_size or mtime != last_mtime:
-                with path.open("r", encoding="utf-8") as f:
+                with path.open("rb") as f:
                     f.seek(pos)
                     new_raw = f.read()
                 new_events = []
@@ -192,8 +242,8 @@ def tail_jsonl_watcher(bcast, stop_flag, path, change_id):
                     if not line:
                         continue
                     try:
-                        new_events.append(json.loads(line))
-                    except json.JSONDecodeError:
+                        new_events.append(json.loads(line.decode("utf-8")))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
                         pass
                 if new_events:
                     bcast.publish({
@@ -209,38 +259,58 @@ def tail_jsonl_watcher(bcast, stop_flag, path, change_id):
         time.sleep(0.5)
 
 
+def _read_index_changes():
+    """读当前 trace 目录下所有 *.events.jsonl 的 (id, mtime, size)。"""
+    trace_dir = STATE["trace_dir"]
+    out = []
+    if trace_dir and trace_dir.exists():
+        for p in sorted(trace_dir.glob("*.events.jsonl")):
+            try:
+                st = p.stat()
+                out.append({
+                    "id": p.name.replace(".events.jsonl", ""),
+                    "mtime": st.st_mtime,
+                    "size": st.st_size,
+                })
+            except Exception:
+                pass
+    return out
+
+
+def _compute_index_sig(data_file):
+    sig = [(c["id"], c["mtime"], c["size"]) for c in _read_index_changes()]
+    if data_file and data_file.exists():
+        try:
+            st = data_file.stat()
+            sig.append(("__data__", st.st_mtime, st.st_size))
+        except Exception:
+            pass
+    return tuple(sig)
+
+
+def make_index_snapshot_fn():
+    def snapshot():
+        return {"event": "updated", "changes": _read_index_changes()}
+    return snapshot
+
+
 def index_watcher(bcast, stop_flag):
     """监视 trace_dir 下所有 *.events.jsonl 的文件列表与 mtime。
 
     任何变化（新 change 出现 / 现有 change 追加）就 publish
     {event:'updated', changes:[{id, mtime, size}, ...]}
+
+    初始 snapshot 由 make_index_snapshot_fn 负责（v1.3.2 fix #1），
+    这里初始化 last_sig 为当前状态，避免启动多发一条相同内容的 updated。
     """
-    trace_dir = STATE["trace_dir"]
     data_file = STATE["data_file"]
-    last_sig = None
+    last_sig = _compute_index_sig(data_file)
 
     while not stop_flag.is_set() and not SHUTDOWN.is_set():
         try:
-            sig = []
-            changes_info = []
-            if trace_dir and trace_dir.exists():
-                for p in sorted(trace_dir.glob("*.events.jsonl")):
-                    st = p.stat()
-                    change_id = p.name.replace(".events.jsonl", "")
-                    changes_info.append({
-                        "id": change_id,
-                        "mtime": st.st_mtime,
-                        "size": st.st_size,
-                    })
-                    sig.append((change_id, st.st_mtime, st.st_size))
-            # data_file 本身也算
-            if data_file and data_file.exists():
-                st = data_file.stat()
-                sig.append(("__data__", st.st_mtime, st.st_size))
-
-            sig = tuple(sig)
+            sig = _compute_index_sig(data_file)
             if sig != last_sig:
-                bcast.publish({"event": "updated", "changes": changes_info})
+                bcast.publish({"event": "updated", "changes": _read_index_changes()})
                 last_sig = sig
         except Exception:
             traceback.print_exc()
@@ -262,6 +332,7 @@ def get_change_broadcaster(change_id):
             bc = Broadcaster(
                 name=key,
                 watcher_fn=lambda b, s: tail_jsonl_watcher(b, s, path, change_id),
+                snapshot_fn=make_tail_snapshot_fn(path, change_id),
             )
             BROADCASTERS[key] = bc
         return bc
@@ -272,7 +343,11 @@ def get_index_broadcaster():
     with BROADCASTERS_LOCK:
         bc = BROADCASTERS.get(key)
         if bc is None:
-            bc = Broadcaster(name=key, watcher_fn=index_watcher)
+            bc = Broadcaster(
+                name=key,
+                watcher_fn=index_watcher,
+                snapshot_fn=make_index_snapshot_fn(),
+            )
             BROADCASTERS[key] = bc
         return bc
 
@@ -473,6 +548,16 @@ def main():
     # ThreadingHTTPServer 默认 allow_reuse_address=True；显式写一下以防回退
     server.allow_reuse_address = True
     server.daemon_threads = True
+
+    # 静音 ConnectionResetError / BrokenPipeError 之类的无害日志（SSE 断连很正常）
+    _orig_handle_error = server.handle_error
+    def _quiet_handle_error(request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
+            return  # 正常断连，不打印
+        if os.environ.get("PL_DASHBOARD_VERBOSE"):
+            _orig_handle_error(request, client_address)
+    server.handle_error = _quiet_handle_error
     print(f"[dashboard-server] http://{args.bind}:{args.port} (live reload via SSE)",
           file=sys.stderr, flush=True)
     print(f"[dashboard-server]   dash_dir : {STATE['dash_dir']}", file=sys.stderr)
