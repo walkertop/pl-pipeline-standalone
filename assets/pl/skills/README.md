@@ -31,8 +31,8 @@ requires: [<other-skill-id@ver>]  # 可选
 
 | Skill | 来源 | 状态 |
 |-------|------|------|
-| `spec-normalizer/` | 从 KuiklyPolyCity 脱敏迁入 | 🟡 D2 样本 |
-| `finalization-template/` | 从 KuiklyPolyCity 脱敏迁入 | 🟡 D3 批量 |
+| `spec-normalizer/` | 从 KuiklyPolyCity 脱敏迁入 | ✅ D2（v1.5.0-alpha）|
+| `finalization-template/` | 从 KuiklyPolyCity 脱敏迁入 | ✅ D3 |
 
 ## 脱敏硬规则
 

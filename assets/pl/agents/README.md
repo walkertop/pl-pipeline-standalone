@@ -19,7 +19,7 @@ Agent 是一个 Markdown 文件，顶部 YAML frontmatter：
 id: pipeline-master
 version: 1.0.0
 scope: generic
-description: "驱动 SPEC→PLAN→IMPLEMENT→VERIFY→SMOKE→OBSERVE→ARCHIVE 六阶段"
+description: "驱动 SPEC→PLAN→IMPLEMENT→VERIFY→SMOKE→OBSERVE→ARCHIVE 七阶段"
 tools: [...]                # 可选：允许使用的工具白名单
 ---
 ```
@@ -30,5 +30,5 @@ tools: [...]                # 可选：允许使用的工具白名单
 
 | Agent | 来源 | 状态 |
 |-------|------|------|
-| `pipeline-master.md` | 从 KuiklyPolyCity 脱敏迁入 | 🟡 D3 |
-| `knowledge-archiver.md` | 同上 | 🟡 D3 |
+| `pipeline-master.md` | 从 KuiklyPolyCity 脱敏迁入 | ✅ D3 |
+| `knowledge-archiver.md` | 同上 | ✅ D3 |

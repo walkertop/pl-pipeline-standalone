@@ -20,6 +20,46 @@
 
 ---
 
+## [1.5.0-beta] — 2026-04-23 · Core Assets Migration · D3 批量
+
+v1.5 第二阶段：**6 个核心资产一次性批量迁移**。
+至此 pl-pipeline-standalone 的核心资产栈（skills + rules + agents）基本完整。
+
+### ✨ Added · 批量迁入
+
+| # | 资产 | 类型 | 源大小 → 目标大小 | 实质耦合 |
+|---|------|------|-----------------|---------|
+| M2 | `finalization-template` | skill | 263 → 244 行 | 0 |
+| M3 | `piao-pipeline-discipline` | rule | 205 → 194 行 | 0 |
+| M4 | `acceptance-criteria` | rule | 133 → 154 行 | 0 |
+| M5 | `build-verification` | rule | 162 → 143 行 | 0 |
+| M6 | `pipeline-master` | agent | 212 → 171 行 | 0 |
+| M7 | `knowledge-archiver` | agent | 164 → 141 行 | 0 |
+| 合计 | | | **1139 → 1047 行** | **0 real coupling** |
+
+37 处源耦合点全部脱敏；6 处 `migrated_from: KuiklyPolyCity` frontmatter 追溯字段保留（合法元数据）。
+
+### 🔧 关键抽象动作
+
+- `build-verification` 的具体 `gradle xxx` / 版本表 **全部抽象**到 `.pl-adapter.yaml`，rule 只定义框架（BUILD-001-STD / WHEN / AUTO）
+- `acceptance-criteria` 的 P0/P1/P2 每项增加"栈级具体化示例"列（Kotlin/Node/Py 三栈对比）
+- `pipeline-master` 六阶段 → 七阶段（补 SMOKE），subagent 调度表改为"项目自定义"，新增辩证模式章节
+- `knowledge-archiver` 的 Step 3/4 改为栈级 vs 通用二元判断，给出"跨栈成立→通用，只某栈→栈级"的判断标准
+- `pipeline-master` / `knowledge-archiver` 增加遵守 `PIAO-001-SHA256` / `PIAO-001-DEFERRED` 的约束（知识沉淀链路也要符合元级纪律）
+
+### 📋 迁移证据
+
+- `docs/retros/asset-migration/batch-d3-coupling-scan.txt` — 最终扫描报告（6/6 OK）
+- `docs/retros/asset-migration/batch-d3-migration.md` — 详细 Before/After 对比 + 分资产脱敏要点
+
+### 🔜 v1.5 后续
+
+- D4: KuiklyPolyCity 侧改 override + 回测（M1~M7 同步处理）
+- D5: `docs/guides/adapter-authoring.md` + `docs/migration/v1.4-to-v1.5.md`
+- D6: 打正式版 tag `pl-v1.5.0`
+
+---
+
 ## [1.5.0-alpha] — 2026-04-23 · Core Assets Migration · D1+D2
 
 v1.5 第一阶段：**核心资产基础设施 + 样本迁移**。
