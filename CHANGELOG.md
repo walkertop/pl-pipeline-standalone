@@ -7,6 +7,104 @@
 
 ---
 
+## [1.3.2-alpha] — 2026-04-23 · Dashboard Live Reload
+
+**主题：Dashboard 从静态快照升级为实时推送。**
+
+v1.3.0-alpha 提供了可视化基础设施（observe 层 + dashboard 双视图），
+但观察者每次必须手动刷新页面才能看到新事件。本版完成实时推送，让"观察"真正具备可观性。
+
+### ✨ Added
+
+- **SSE 长连接服务端**（`scripts/_lib/dashboard-server.py`）
+  - 零第三方依赖（仅 Python stdlib：`http.server` + `threading` + `queue`）
+  - `GET /_events/stream?change=<id>` — 单 change events.jsonl tail，推送 `snapshot / append / reset / missing` 事件
+  - `GET /_events/index` — trace 目录整体变化（新 change 出现 / 现有 change 有更新）
+  - `HEAD /_events/ping` — 前端能力探测端点
+  - 多订阅者共享单个 watcher 线程；最后一个订阅者离开时 watcher 自动停止
+  - 15s 心跳（`: keepalive\n\n`）防中间件断连
+  - 支持 jsonl rotate / truncate（发 `reset` 事件让客户端重订阅）
+
+- **SSE 客户端库**（`dashboard/assets/live.js`）
+  - `probeLiveReload()` — HEAD 探测，2s 超时
+  - `subscribeChange(changeId, handlers)` — 订阅单 change 流
+  - `subscribeIndex(handlers)` — 订阅目录流
+  - `EventSource` 指数退避自动重连（1s → 15s，上限）
+  - `mountStatusBadge()` — 头部状态徽章工厂
+
+- **前端 Live Reload 集成**
+  - `change.html`：收到 `snapshot` 渲染全量，`append` 增量 prepend（1.2s 闪烁高亮），同步刷新 info cards 和 stage pipeline
+  - `index.html`：收到 `updated` 按 change_id 粒度增量 upsert / remove 卡片
+  - 顶部 Live 徽章四态：`● live` / `◐ connecting` / `✕ reconnect` / `○ static`
+
+- **降级路径**
+  - `pl-dashboard.sh --static-only` 回退到 `python3 -m http.server`（v1.3.0 原行为）
+  - 前端 probe 失败自动退回一次性静态加载模式，徽章显示 `○ static`
+
+### 🎨 UI
+
+- 新事件行进场动画：`@keyframes event-flash`（1.2s accent 色背景渐隐）
+- Live 徽章脉动：`@keyframes live-pulse`（on 状态 1.8s 周期，connecting 0.9s）
+- 新增 `.live-badge` 4 种状态样式
+
+### 🔧 Changed
+
+- `scripts/pl-dashboard.sh` 默认走新 server（live-reload 模式），新增 `--static-only` 参数
+- live-reload 模式下 `/trace/*` 路由由 server 直接处理（不再强依赖 symlink；symlink 仍保留用于 static-only 兼容）
+
+### 📐 架构备注
+
+选 SSE 而非 WebSocket：
+- WebSocket 需要额外库 + 握手复杂度
+- SSE 单向推送已满足"服务端→浏览器"的事件流场景
+- 浏览器 `EventSource` 原生支持自动重连，客户端代码极简
+
+选自写 `BaseHTTPRequestHandler` 而非 `python3 -m http.server`：
+- stdlib `http.server` 不支持长连接端点
+- 自写 server 仍保持零第三方依赖原则
+
+### 🧪 E2E 验证
+
+- `pl-dashboard.sh` 启动 → curl `/_events/stream` 看到 `hello / snapshot / append` 推送
+- Playwright 打开 index.html → 追加事件后卡片自动刷新任务计数 + 事件数
+- Playwright 打开 change.html → 追加事件后 timeline 实时多出新行
+- `--static-only` 模式下前端 probe 失败，徽章显示 `○ static`，功能降级到 v1.3.0
+
+证据快照：`docs/retros/evidence-2026-04-v1.3.2/change-live.png`
+
+---
+
+## [1.3.0-alpha] — 2026-04-22 · Observe 层 MVP
+
+**主题：从"事件已发生"到"事件可被看见"。**
+
+### ✨ Added
+
+- **事件信封 schema v1.3**（`assets/pl/schemas/event-v1.3.schema.json`）
+  - 8 字段规范：`ts / trace_id / change_id / phase / actor / event / data / parent_trace_id?`
+  - actor 三类：`agent:<id>@<ver>` / `rule:<id>@<ver>` / `skill:<id>@<ver>`
+
+- **零依赖 fs watcher**（`scripts/_lib/observe-fs.py`）
+  - Python stdlib 轮询（0.5s 间隔）
+  - 21 个资产（rule / skill）批量补 frontmatter `id + version`（`scripts/_lib/backfill-frontmatter.py`）
+
+- **业务语义规则引擎**（`scripts/_lib/observe-apply-rules.py`）
+  - 5 条默认规则（`assets/pl/observe-rules.default.yaml`）：taskdag row added / taskdag task done / state stage transition / rule asset promoted / skill asset promoted
+  - 规则把 `artifact.modified` 类底层事件聚合为 `plan.task.added / task.done / state.transition / asset.promoted` 业务事件
+  - 去重 key 含 captures，避免一次大修改被当成一条
+
+- **Dashboard MVP 双视图**（`dashboard/`）
+  - index.html：change 列表（卡片、stage、gate、tasks、violation）
+  - change.html：单 change timeline + 3 维过滤 + payload 展开
+  - 纯静态 HTML + CSS + ES modules，无构建
+  - dark/light 主题切换（localStorage 持久化）
+
+### 🧪 实测
+
+- 48 events，Playwright 验证 index / change / filter / payload expand 全通过
+
+---
+
 ## [1.2.0] — 2026-04-22 · retro-v2 收官版
 
 **主题：pl/piao 从"文档契约层"彻底升级为"可执行契约层"。**

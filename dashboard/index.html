@@ -14,6 +14,7 @@
     <div class="nav-brand-mark">pl</div>
     <span>pl-pipeline Dashboard</span>
     <span class="nav-meta" style="margin-left: 12px;">v1.3 observe</span>
+    <span id="live-badge-slot"></span>
   </div>
   <button class="theme-toggle" id="theme-toggle" title="切换主题">
     <span id="theme-icon">☀</span>
@@ -38,8 +39,14 @@
 <script type="module">
 import { parseJSONL, aggregateChange, STAGES, stageStatus, fmtRelative } from './assets/parser.js';
 import { initTheme } from './assets/theme.js';
+import { probeLiveReload, subscribeIndex, mountStatusBadge } from './assets/live.js';
 
 initTheme();
+
+const badge = mountStatusBadge(document.getElementById('live-badge-slot'));
+
+// change_id -> { tracePath, mtime, size, agg }
+const changeCache = new Map();
 
 async function loadIndex() {
   try {
@@ -51,8 +58,8 @@ async function loadIndex() {
   }
 }
 
-async function loadChangeEvents(changeId, tracePath) {
-  const resp = await fetch(tracePath);
+async function loadChangeEvents(tracePath) {
+  const resp = await fetch(tracePath, { cache: 'no-store' });
   if (!resp.ok) return [];
   const text = await resp.text();
   return parseJSONL(text);
@@ -78,10 +85,10 @@ function gateStatusBadge(status) {
   return '<span class="badge badge-blue">in progress</span>';
 }
 
-function renderCard(agg) {
+function cardHTML(agg) {
   const stageText = agg.stage;
   return `
-    <a class="card" href="change.html?id=${encodeURIComponent(agg.change_id)}" style="color:inherit; display:block;">
+    <a class="card" data-change="${agg.change_id}" href="change.html?id=${encodeURIComponent(agg.change_id)}" style="color:inherit; display:block;">
       <div class="card-head">
         <h3 class="card-title">${agg.change_id}</h3>
         ${gateStatusBadge(agg.gate_status)}
@@ -104,33 +111,114 @@ function renderCard(agg) {
   `;
 }
 
-async function render() {
+function upsertCard(agg) {
+  const grid = document.getElementById('grid');
+  const existing = grid.querySelector(`.card[data-change="${agg.change_id}"]`);
+  const html = cardHTML(agg);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const newCard = wrap.firstElementChild;
+  if (existing) {
+    existing.replaceWith(newCard);
+  } else {
+    grid.appendChild(newCard);
+    // 新卡片淡入（复用 event flash 样式思路）
+    newCard.style.animation = 'event-flash 1.2s ease-out';
+  }
+  document.getElementById('empty').style.display = 'none';
+}
+
+function removeCard(changeId) {
+  const el = document.querySelector(`#grid .card[data-change="${changeId}"]`);
+  if (el) el.remove();
+  if (!document.querySelector('#grid .card')) {
+    document.getElementById('empty').style.display = 'block';
+  }
+}
+
+async function refreshOne(changeId, tracePath) {
+  const events = await loadChangeEvents(tracePath);
+  if (events.length === 0) {
+    // 空文件：删除卡片
+    removeCard(changeId);
+    changeCache.delete(changeId);
+    return;
+  }
+  const agg = aggregateChange(events);
+  if (!agg) return;
+  changeCache.set(changeId, { tracePath, agg });
+  upsertCard(agg);
+}
+
+async function fullRender() {
   const idx = await loadIndex();
   const grid = document.getElementById('grid');
   const empty = document.getElementById('empty');
 
   if (!idx.changes || idx.changes.length === 0) {
+    grid.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
 
-  const cards = [];
+  // 清空重建（保证顺序）
+  grid.innerHTML = '';
+  let shown = 0;
   for (const c of idx.changes) {
-    const events = await loadChangeEvents(c.id, c.trace_path);
+    const events = await loadChangeEvents(c.trace_path);
     if (events.length === 0) continue;
     const agg = aggregateChange(events);
-    if (agg) cards.push(renderCard(agg));
+    if (!agg) continue;
+    changeCache.set(c.id, { tracePath: c.trace_path, agg });
+    grid.insertAdjacentHTML('beforeend', cardHTML(agg));
+    shown++;
   }
 
-  if (cards.length === 0) {
-    empty.style.display = 'block';
+  empty.style.display = shown === 0 ? 'block' : 'none';
+}
+
+async function main() {
+  const liveMode = await probeLiveReload();
+  await fullRender();
+
+  if (!liveMode) {
+    badge.set('off');
     return;
   }
 
-  grid.innerHTML = cards.join('');
+  badge.set('connecting');
+  subscribeIndex({
+    onStatus: (s) => {
+      if (s === 'open') badge.set('on');
+      else if (s === 'error') badge.set('error');
+      else if (s === 'connecting') badge.set('connecting');
+    },
+    onUpdated: async (changes) => {
+      // 收到快照：changes 是当前 trace 目录的全集
+      const currentIds = new Set(changes.map(c => c.id));
+      // 删除消失的
+      for (const [id] of changeCache) {
+        if (!currentIds.has(id)) {
+          removeCard(id);
+          changeCache.delete(id);
+        }
+      }
+      // refresh 所有有变化的
+      for (const c of changes) {
+        const cached = changeCache.get(c.id);
+        const tracePath = `trace/${c.id}.events.jsonl`;
+        if (!cached || cached.agg.last_event_ts === undefined ||
+            c.size !== (cached._size || -1) || c.mtime !== (cached._mtime || 0)) {
+          await refreshOne(c.id, tracePath);
+          const v = changeCache.get(c.id);
+          if (v) { v._size = c.size; v._mtime = c.mtime; }
+        }
+      }
+    },
+  });
 }
 
-render();
+main();
 </script>
 
 </body>

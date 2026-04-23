@@ -220,6 +220,39 @@ a:hover { text-decoration: underline; }
 .muted { color: var(--text-muted); }
 .dim { color: var(--text-dim); }
 
+/* ─── Live reload badge ───────────────────────────────────────────── */
+.live-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px; border-radius: 999px; font-size: 11px;
+  font-family: var(--font-mono); border: 1px solid var(--border);
+  background: var(--bg-alt); color: var(--text-muted);
+  margin-left: 10px; user-select: none;
+}
+.live-badge .live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-dim); display: inline-block; font-size: 0;
+}
+.live-badge-on { color: var(--green); border-color: color-mix(in srgb, var(--green) 30%, transparent); }
+.live-badge-on .live-dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: live-pulse 1.8s ease-in-out infinite; }
+.live-badge-connecting { color: var(--yellow); }
+.live-badge-connecting .live-dot { background: var(--yellow); animation: live-pulse 0.9s ease-in-out infinite; }
+.live-badge-error { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); }
+.live-badge-error .live-dot { background: var(--red); }
+.live-badge-off { color: var(--text-dim); }
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* 新事件闪烁入场 */
+.event.just-appended {
+  animation: event-flash 1.2s ease-out;
+}
+@keyframes event-flash {
+  0%   { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+  100% { background: transparent; }
+}
+
 @media (max-width: 720px) {
   .info-grid { grid-template-columns: repeat(2, 1fr); }
   .event { grid-template-columns: 70px 90px 1fr; font-size: 11px; }
