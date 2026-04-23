@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pl-pipeline.dev/schemas/contract-registry-v1.json",
+  "title": "pl-pipeline ContractRegistry v1 (broker registry)",
+  "description": "由 pl-contract-aggregate.sh 跨所有 change 聚合产出的注册表。回答两类问题：(1) 哪些 change 在用某个 adapter？(2) 某个 adapter 资产被多少 change 使用？",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "pacts", "adapters"],
+  "properties": {
+    "apiVersion": { "type": "string", "const": "piao.dev/v1" },
+    "kind":       { "type": "string", "const": "ContractRegistry" },
+    "metadata": {
+      "type": "object",
+      "required": ["generated_at", "generator"],
+      "properties": {
+        "generated_at":     { "type": "string", "format": "date-time" },
+        "generator":        { "type": "string" },
+        "change_count":     { "type": "integer", "minimum": 0 },
+        "adapter_count":    { "type": "integer", "minimum": 0 },
+        "total_use_events": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "pacts": {
+      "type": "array",
+      "description": "每条 = (consumer change, provider adapter) 配对的摘要。",
+      "items": {
+        "type": "object",
+        "required": ["change_id", "adapter"],
+        "properties": {
+          "change_id":     { "type": "string" },
+          "adapter":       { "type": "string" },
+          "versions_seen": { "type": "array", "items": { "type": "string" } },
+          "consumed_summary": {
+            "type": "object",
+            "description": "按 asset_kind 计数（去重的资产数 + 总使用次数）",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "distinct": { "type": "integer", "minimum": 0 },
+                "uses":     { "type": "integer", "minimum": 0 }
+              }
+            }
+          },
+          "last_seen": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "adapters": {
+      "type": "object",
+      "description": "按 adapter 反向索引：每个 adapter 被哪些 change 用、各资产被消费的次数。",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "consumer_count": { "type": "integer", "minimum": 0 },
+          "consumers":      { "type": "array", "items": { "type": "string" } },
+          "asset_usage": {
+            "type": "object",
+            "description": "asset_kind → asset_id → {changes, total_uses}",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "changes":    { "type": "integer", "minimum": 0 },
+                  "total_uses": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
