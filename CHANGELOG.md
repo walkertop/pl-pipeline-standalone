@@ -20,6 +20,45 @@
 
 ---
 
+## [1.5.0-alpha] — 2026-04-23 · Core Assets Migration · D1+D2
+
+v1.5 第一阶段：**核心资产基础设施 + 样本迁移**。
+完成后 pl-pipeline-standalone 不再"有流程无脑"。
+
+### ✨ Added
+
+- **通用资产目录骨架**
+  - `assets/pl/skills/` + README（含分层说明：通用 < 栈级 < 项目级）
+  - `assets/pl/rules/` + README（含 frontmatter 规范）
+  - `assets/pl/agents/` + README
+  - 三层加载优先级：项目 > 栈 > 通用
+
+- **脱敏指南**：[`docs/guides/asset-sanitization-guide.md`](./docs/guides/asset-sanitization-guide.md)
+  - 硬脱敏 / 软脱敏规则
+  - Frontmatter 强制字段（id / version / scope / category / migrated_from）
+  - 5 步迁移工作流 + PR Review Checklist
+  - 3 种常见错误
+
+- **样本资产：`spec-normalizer@1.0.0`**
+  - 从 KuiklyPolyCity 迁入并脱敏
+  - **硬耦合点 19 → 0**（仅保留合法的 `migrated_from` 追溯字段）
+  - 2 个不同域示例（电商订单 / 博客编辑器）
+  - 改良：标注可选章节、新增辩证使用提示、提及 working-with-fuzzy-intent
+
+### 📋 迁移证据
+- `docs/retros/asset-migration/spec-normalizer-coupling-scan-before.txt`
+- `docs/retros/asset-migration/spec-normalizer-coupling-scan-after.txt`
+- `docs/retros/asset-migration/spec-normalizer-migration.md`（Before/After 详细对比 + override 计划）
+
+### 🔜 v1.5 后续阶段
+
+- D3: 批量迁移 M2~M7（finalization-template / 3 个 rules / 2 个 agents）
+- D4: KuiklyPolyCity 侧改为 override 并回测
+- D5: 写 `adapter-authoring.md` + `v1.4-to-v1.5.md` 升级文档
+- D6: 打正式版 tag `pl-v1.5.0`
+
+---
+
 ## [1.3.2] — 2026-04-23 · Dashboard Live Reload（正式版）
 
 本版本是 `1.3.2-alpha` → `1.3.2-alpha.2` 两次打磨后的**稳定版**。

@@ -1,0 +1,17 @@
+=== Coupling scan AFTER sanitization ===
+Target: /Users/guobin/Developer/djc1/pl-pipeline-standalone/assets/pl/skills/spec-normalizer
+Date: 2026-04-23T06:48:05Z
+
+--- SKILL.md ---
+7:migrated_from: KuiklyPolyCity@feature/caleb/agentic
+
+--- examples/*.md ---
+# blog-system-spec.md
+(no match)
+
+# ecommerce-order-spec.md
+(no match)
+
+
+--- Totals (hard coupling) ---
+SKILL.md: 1 hard matches
