@@ -37,6 +37,6 @@ fix_hint: "..."
 
 | Rule | 来源 | 状态 |
 |------|------|------|
-| `piao-pipeline-discipline.md` | 从 KuiklyPolyCity 脱敏迁入 | 🟡 D3 |
-| `acceptance-criteria.md` | 同上 | 🟡 D3 |
-| `build-verification.md` | 同上（gradle 示例需抽象） | 🟡 D3 |
+| `piao-pipeline-discipline.md` | 从 KuiklyPolyCity 脱敏迁入 | ✅ D3 |
+| `acceptance-criteria.md` | 同上 | ✅ D3 |
+| `build-verification.md` | 同上（gradle 命令抽象化完成）| ✅ D3 |

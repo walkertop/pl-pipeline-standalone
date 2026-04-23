@@ -1,0 +1,11 @@
+=== D3 Batch Coupling Scan (final) ===
+Date: 2026-04-23T07:25:42Z
+
+[OK] SKILL.md                                 1 total | 1 legit | 0 real
+[OK] piao-pipeline-discipline.md              1 total | 1 legit | 0 real
+[OK] acceptance-criteria.md                   1 total | 1 legit | 0 real
+[OK] build-verification.md                    1 total | 1 legit | 0 real
+[OK] pipeline-master.md                       1 total | 1 legit | 0 real
+[OK] knowledge-archiver.md                    1 total | 1 legit | 0 real
+
+TOTAL: 6 hits | 6 legitimate | 0 real coupling
