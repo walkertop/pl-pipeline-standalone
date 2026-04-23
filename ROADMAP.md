@@ -7,14 +7,16 @@
 
 ## 当前版本
 
-- **v1.3.2-alpha.2**（2026-04-23）：snapshot-lost bug fix + Dashboard 用户手册 ([dashboard-guide.md](./docs/dashboard-guide.md))
-- **v1.3.2-alpha**（2026-04-23）：Dashboard live reload（SSE 实时推送 + 自动重连 + 静态降级）
+- **v1.5.0**（2026-04-23）：Core Assets Migration · RELEASE 🎉 — 三层资产栈落地，11 资产完成脱敏迁移，新增 adapter-kotlin；0 硬耦合。发布说明见 [`docs/milestones/2026-04-v1.5.0-release.md`](./docs/milestones/2026-04-v1.5.0-release.md)
+- **v1.3.2**（2026-04-23）：Dashboard live reload 稳定版（SSE 实时推送 + per-subscriber snapshot 修复 + 用户手册）
 - **v1.4.0-alpha**（2026-04-22）：retro-miner 四类离线 pattern 挖掘（频次/共现/反模式/异常）
 - **v1.3.0-alpha**（2026-04-22）：Observe 层 MVP（event v1.3 schema + fs watcher + 规则引擎 + Dashboard 双视图）
 - **v1.2.0**（2026-04-22）：retro-v2 收官版（E1~E4 闭环，4/4 通用抽象落地）
 - **v0.1.0-mvp**（2026-04-21）：独立仓建立 + 三层架构 + 2 个 reference adapter + 2 个端到端 demo
 
 > 📖 v1.3.x 系列阶段性总结：[`docs/milestones/2026-04-v1.3.x-summary.md`](./docs/milestones/2026-04-v1.3.x-summary.md)
+> 📖 v1.5.0 发布说明：[`docs/milestones/2026-04-v1.5.0-release.md`](./docs/milestones/2026-04-v1.5.0-release.md)
+> 🗺 v1.6+ 规划：[`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)
 
 ---
 
@@ -22,32 +24,29 @@
 
 主线：**工具产出的数据本身开始成为价值载体**。
 
-> ⚠️ **2026-04-23 调整**：原规划 A → E' → B → C → D 在 review 时暴露一个根本性缺口——
-> **pl-pipeline-standalone 下没有任何 skills / rules / agents**，所有"通用能力"物理上住在
-> KuiklyPolyCity 里。新用户执行 `/pl:*` 命令会发现命令是空壳，背后没脑。
-> 因此插入 **v1.5 核心资产迁移** 作为 E' 的必要前置。
-> 详见 [`docs/milestones/v1.5-migrate-core-assets.md`](./docs/milestones/v1.5-migrate-core-assets.md)。
+> ✅ **2026-04-23 v1.5 已完成**：核心资产栈从 KuiklyPolyCity 完成迁移，pl-pipeline-standalone
+> 不再"空壳"。详见 [`docs/milestones/2026-04-v1.5.0-release.md`](./docs/milestones/2026-04-v1.5.0-release.md)。
+> **下一步的 4 条路径及推荐序列**见 [`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)。
 
 | # | 里程碑 | 目标 | 投入 | 依赖 | 状态 |
 |---|--------|------|------|------|------|
 | A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag | 10 分钟 | 无 | ✅ 已完成（pl-v1.3.2） |
-| **v1.5** | **核心资产迁移** | spec-normalizer 等 7 个通用资产脱敏迁到独立仓 | 4~6 天 | 无 | 🟡 进行中（D3 完成，D4~D6 待做）|
+| **v1.5** | **核心资产迁移** | spec-normalizer 等 11 个通用资产脱敏迁到独立仓 + 新 adapter-kotlin | 1 天 | 无 | ✅ 已完成（pl-v1.5.0） |
 | — | 辩证方法论文档 | 让模糊需求在格式化工具里有容身之地 | 已完成 | — | ✅ `docs/guides/working-with-fuzzy-intent.md` |
-| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 小时 | **v1.5** | 🟡 待定场景 |
-| B | retro-miner 跑真实 trace | 验证 4 类挖掘算法的 precision/recall 在真实数据上是否成立 | 1–2 小时 | E' | 🟡 待做 |
-| C | Dashboard 接入 retro-miner 结果 | 把挖掘出的 pattern / anti-pattern 可视化 | 半天 | B | 🟡 待做 |
-| D | E5 trace-verifier 契约 v0.1 | 用 B 积累的真实 pattern 反推契约规则 | 半天 | B + 真实数据 | 🟡 待做 |
+| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 天 | **v1.5 ✅** | 🟡 **下一步优先** |
+| F | 扩充 adapter 生态（android / kmp-kuikly / go） | 证明栈级 adapter 机制可复用 | 4–5 天 | E' | 🟡 待做 |
+| G | v0.2 CLI 打包（`pl init`）| 降低使用门槛 30 秒上手 | 5–7 天 | E' | 🟡 待做 |
+| H | retro-miner 真实 trace 挖掘链路（B→C→D） | 闭合"观察-挖掘-反馈"飞轮 | 2–3 天 | E' | 🟡 待做 |
 
-### E' 场景候选（v1.5 完成后拍板）
+### E' 场景候选（v1.5 已完成，现可拍板）
 
-| 候选 | 优点 | 缺点 |
-|------|------|------|
-| 自举：给 pl-pipeline-standalone 加一个小功能 | 工具链就位 | 业务特征不典型 |
-| 跑 `examples/demo-nextjs-todo` | 已有资产，立等可用 | 只复演，无新业务 |
-| 新建一个独立小项目（如 markdown parser） | 最干净 | 需先建项目 |
+| 候选 | 优点 | 缺点 | 推荐 |
+|------|------|------|------|
+| **新建 next.js todo app**（或升级 `examples/demo-nextjs-todo`）| 最干净；已有 adapter-nextjs-web；能验证整条链路 | 需要一点真实代码工作量 | ⭐⭐⭐⭐⭐ |
+| 自举：给 pl-pipeline 自己加小功能 | 工具链现成 | 自举验证说服力弱 | ⭐⭐⭐ |
+| 新建 markdown parser CLI | 极干净 | 没有现成 adapter | ⭐⭐ |
 
-**用户已明确否决**："不选 KuiklyPolyCity"——Kuikly 迁移场景事件偏 `artifact.*`，
-不够代表通用 pipeline 使用。
+**用户已明确否决**："不选 KuiklyPolyCity"。
 
 ---
 

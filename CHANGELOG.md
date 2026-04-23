@@ -11,12 +11,67 @@
 > （v1.3.0-alpha → v1.4.0-alpha → v1.3.2-alpha → v1.3.2-alpha.2）。
 > 总结文档 + 下一阶段规划见 [`docs/milestones/2026-04-v1.3.x-summary.md`](./docs/milestones/2026-04-v1.3.x-summary.md)。
 >
-> 🔴 **2026-04-23 识别出关键缺口**：`assets/pl/` 下无 skills / rules / agents，
-> 通用能力物理上住在 KuiklyPolyCity。新用户执行 `/pl:*` 命令会发现命令是空壳。
-> 已立 v1.5 milestone 处理：[`docs/milestones/v1.5-migrate-core-assets.md`](./docs/milestones/v1.5-migrate-core-assets.md)。
+> 🎉 **2026-04-23 v1.5.0 正式发布**：pl-pipeline-standalone 从"空壳工具"升级为**有脑**的完整研发流水线。
+> 三层资产栈（generic/stack/project）落地，64 处源耦合点脱敏为 0，11/11 资产 frontmatter 合规。
+> 发布说明：[`docs/milestones/2026-04-v1.5.0-release.md`](./docs/milestones/2026-04-v1.5.0-release.md)
+> 下一步规划：[`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)
 >
-> 📖 同时新增辩证方法论文档：[`docs/guides/working-with-fuzzy-intent.md`](./docs/guides/working-with-fuzzy-intent.md)
+> 📖 本版同时新增辩证方法论文档：[`docs/guides/working-with-fuzzy-intent.md`](./docs/guides/working-with-fuzzy-intent.md)
 > —— 教用户怎么用格式化工具而不被它框死。
+
+---
+
+## [1.5.0] — 2026-04-23 · Core Assets Migration · RELEASE 🎉
+
+**主题**：pl-pipeline-standalone 从"空壳工具"升级为**有脑**的完整研发流水线。
+
+### ✨ 里程碑级变化
+
+- **三层资产栈落地**：generic（`assets/pl/`）→ stack（`adapters/adapter-*/`）→ project（`<user-project>/.codebuddy/`）
+- **11 个核心资产完成脱敏迁移**（Tier 0 的 7 + Tier 1 的 4）
+- **首个栈级基础 adapter：adapter-kotlin**（可被 android / kmp-kuikly 叠加）
+- **64 处源耦合点清零**（硬耦合 3→0 + 软耦合 5→0 + D3 37→0 + D2 19→0）
+
+### 📦 完整产物清单
+
+| 类别 | 产物数量 | 新增 |
+|------|---------|------|
+| 通用 skills | 2 | spec-normalizer, finalization-template |
+| 通用 rules | 4 | acceptance-criteria, build-verification, piao-pipeline-discipline, git-commit |
+| 通用 agents | 2 | pipeline-master, knowledge-archiver |
+| 栈级 adapter | 1 | adapter-kotlin（2 rules + 1 skill + 3 scripts）|
+| 指南文档 | 4 | asset-sanitization-guide, adapter-authoring, working-with-fuzzy-intent, v1.4-to-v1.5 |
+| 里程碑文档 | 2 | v1.5-migrate-core-assets, 2026-04-v1.5.0-release |
+| 后续规划 | 1 | v1.6-next-planning |
+| 迁移证据 | 8 | 3 批 before/after/retro 完整证据链 |
+
+### 📊 质量指标
+
+- adapter-validate 通过率: **3/3 (100%)**
+- Frontmatter 合规率: **11/11 (100%)**
+- 真实耦合点: **0**
+- Breaking changes: **3 minor**（文件名归一化 / gradle 命令外化 / 六→七阶段）
+
+### 🎯 完成 v1.5 milestone 的 4 条成功标准
+
+| # | 成功标准 | 达成 |
+|---|---------|------|
+| 1 | 独立仓有完整通用资产目录 | ✅ |
+| 2 | 7 个关键资产脱敏迁移 | ✅ 超额 8/7 + 4 Tier 1 |
+| 3 | KuiklyPolyCity 改 override | ⏭ 用户要求跳过 |
+| 4 | 任何新用户能用 | ✅ 通过 validate + 0 耦合 |
+
+### 🗺 下一步方向（v1.6+）
+
+详见 [`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)。
+
+4 条候选路径：
+- **E'**：跑一个干净新项目验证（推荐优先）
+- F: 扩充 adapter 生态（android / kmp-kuikly / go）
+- G: v0.2 CLI 打包（`pl init` / `pl install-adapter`）
+- H: retro-miner 真实 trace 挖掘链路
+
+推荐方案 A（保守路径）：**E' → H → F → G**，总周期 10~15 天。
 
 ---
 
