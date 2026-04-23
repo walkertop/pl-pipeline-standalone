@@ -189,6 +189,55 @@ build_adapter:
 
 ---
 
+### 3.4 capabilities · 给 consumer 一层抽象（v1.7+）
+
+`provides.capabilities[]` 是 v1.7 双向 CDC 引入的可选段。
+
+**为什么要它**：v1.6 之前，consumer（change）的 pact 只能声明"我用了 skill X / build_command Y"。
+但这意味着 consumer 被绑死到 adapter 的内部实现名——adapter 内部把 `nextjs-data-fetching` 改名成
+`nextjs-server-actions` 就是 breaking change。
+
+加了 capability 抽象层之后，consumer 可以声明"我需要 `server-action-support`"，
+adapter 内部用什么 skill 实现是它自己的事。
+
+#### 语法
+
+```yaml
+provides:
+  capabilities:
+    - id: <kebab-case-id>                # 必填，如 typecheck / server-action-support
+      backed_by:                         # 必填，指向真实实现（或 null）
+        skill: <skill-id>                # 四选一：skill / rule / build_command / null
+        # rule: <rule-id>
+        # build_command: <command-id>
+      since: <semver>                    # 可选，从哪个 adapter 版本开始支持
+      deprecated_in: <semver>            # 可选，从哪个版本起标为废弃（verify 给 warning）
+      removed_in: <semver>               # 可选，从哪个版本起移除（verify 报 broken）
+      reason: <text>                     # 可选，废弃原因 / 不支持原因
+```
+
+#### 三种特殊用法
+
+| 写法 | 语义 |
+|---|---|
+| `backed_by: { skill: nextjs-data-fetching }` | adapter 用这个 skill 实现该 capability |
+| `backed_by: null` + `reason: ...` | **显式声明**"本 adapter 不支持此 capability"。比"不写"更明确，避免 consumer 猜 |
+| `deprecated_in: 0.3.0` | 0.3 起 verify 给 warning，consumer 应迁移；`removed_in` 触发后才阻塞 |
+
+#### 命名建议
+
+- 用问题域语言命名（`server-action-support`、`smoke-probe`），不要用实现名（`nextjs-data-fetching-skill`）
+- 一个 capability 对应一个 backed_by；如果一个能力需要多个底层资产配合，
+  说明它是"复合能力"，应当拆成多个 capability 各自单一职责
+
+#### 何时不写
+
+- 一次性 / 内部实现细节 → 不需要做成 capability
+- 还没有任何 consumer 用过 → 等真有 pact 引用了再补
+- adapter 还在 0.x 早期实验 → 直接迁移 skill 名也可以接受
+
+---
+
 ## 4. rules 写作规范
 
 ### 4.1 frontmatter
