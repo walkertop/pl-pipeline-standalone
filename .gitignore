@@ -49,6 +49,7 @@ dist/
 build/
 out/
 lib/
+!cli/lib/
 *.tsbuildinfo
 .turbo/
 .next/
