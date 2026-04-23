@@ -10,6 +10,13 @@
 > 📍 **2026-04-23 阶段性回顾**：v1.3.x 观察层系列已在两天内完成
 > （v1.3.0-alpha → v1.4.0-alpha → v1.3.2-alpha → v1.3.2-alpha.2）。
 > 总结文档 + 下一阶段规划见 [`docs/milestones/2026-04-v1.3.x-summary.md`](./docs/milestones/2026-04-v1.3.x-summary.md)。
+>
+> 🔴 **2026-04-23 识别出关键缺口**：`assets/pl/` 下无 skills / rules / agents，
+> 通用能力物理上住在 KuiklyPolyCity。新用户执行 `/pl:*` 命令会发现命令是空壳。
+> 已立 v1.5 milestone 处理：[`docs/milestones/v1.5-migrate-core-assets.md`](./docs/milestones/v1.5-migrate-core-assets.md)。
+>
+> 📖 同时新增辩证方法论文档：[`docs/guides/working-with-fuzzy-intent.md`](./docs/guides/working-with-fuzzy-intent.md)
+> —— 教用户怎么用格式化工具而不被它框死。
 
 ---
 

@@ -22,15 +22,23 @@
 
 主线：**工具产出的数据本身开始成为价值载体**。
 
+> ⚠️ **2026-04-23 调整**：原规划 A → E' → B → C → D 在 review 时暴露一个根本性缺口——
+> **pl-pipeline-standalone 下没有任何 skills / rules / agents**，所有"通用能力"物理上住在
+> KuiklyPolyCity 里。新用户执行 `/pl:*` 命令会发现命令是空壳，背后没脑。
+> 因此插入 **v1.5 核心资产迁移** 作为 E' 的必要前置。
+> 详见 [`docs/milestones/v1.5-migrate-core-assets.md`](./docs/milestones/v1.5-migrate-core-assets.md)。
+
 | # | 里程碑 | 目标 | 投入 | 依赖 | 状态 |
 |---|--------|------|------|------|------|
-| A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag，发布到 ROADMAP 稳定轨道 | 10 分钟 | 无 | 🟡 待做 |
-| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 小时 | A | 🟡 待定场景 |
+| A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag | 10 分钟 | 无 | 🟡 待做 |
+| **v1.5** | **核心资产迁移** | spec-normalizer 等 7 个通用资产脱敏迁到独立仓 | 4~6 天 | 无 | 🔴 **关键缺口** |
+| — | 辩证方法论文档 | 让模糊需求在格式化工具里有容身之地 | 已完成 | — | ✅ `docs/guides/working-with-fuzzy-intent.md` |
+| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 小时 | **v1.5** + A | 🟡 待定场景 |
 | B | retro-miner 跑真实 trace | 验证 4 类挖掘算法的 precision/recall 在真实数据上是否成立 | 1–2 小时 | E' | 🟡 待做 |
 | C | Dashboard 接入 retro-miner 结果 | 把挖掘出的 pattern / anti-pattern 可视化 | 半天 | B | 🟡 待做 |
-| D | E5 trace-verifier 契约 v0.1 | 用 B 积累的真实 pattern 反推契约规则（避免 retro-v1 老路） | 半天 | B + 真实数据 | 🟡 待做 |
+| D | E5 trace-verifier 契约 v0.1 | 用 B 积累的真实 pattern 反推契约规则 | 半天 | B + 真实数据 | 🟡 待做 |
 
-### E' 场景候选（待拍板）
+### E' 场景候选（v1.5 完成后拍板）
 
 | 候选 | 优点 | 缺点 |
 |------|------|------|
