@@ -203,7 +203,7 @@ commands:
 
 - **Trace JSONL**：每一步都结构化记录到 `pipeline-output/trace/<change>.events.jsonl`
 - **HTML 报告**：`pl report` 一键生成可视化报告
-- **Dashboard**：Web 面板实时查看所有变更状态
+- **Dashboard**：Web 面板实时查看所有变更状态（SSE live reload）→ 使用手册：[`docs/dashboard-guide.md`](./docs/dashboard-guide.md)
 - **断点续跑**：读 `.state.md` 就能从中断处继续，哪怕换了 AI、换了人
 
 ---

@@ -3,6 +3,9 @@
 零构建可视化面板，展示 change 状态 + 完整 trace 事件流。
 **v1.3.2 起支持 live reload（SSE 推送）**。
 
+> 👉 **面向最终用户的使用手册**：[`docs/dashboard-guide.md`](../docs/dashboard-guide.md)
+> 本文偏**开发者视角**，讲实现细节与架构。
+
 ## 启动
 
 ```bash
