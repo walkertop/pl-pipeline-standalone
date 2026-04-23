@@ -7,6 +7,12 @@
 
 ---
 
+> 📍 **2026-04-23 阶段性回顾**：v1.3.x 观察层系列已在两天内完成
+> （v1.3.0-alpha → v1.4.0-alpha → v1.3.2-alpha → v1.3.2-alpha.2）。
+> 总结文档 + 下一阶段规划见 [`docs/milestones/2026-04-v1.3.x-summary.md`](./docs/milestones/2026-04-v1.3.x-summary.md)。
+
+---
+
 ## [1.3.2-alpha.2] — 2026-04-23 · snapshot-lost 修复 + 用户文档
 
 ### 🐛 Fixed

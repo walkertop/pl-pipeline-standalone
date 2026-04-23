@@ -7,11 +7,39 @@
 
 ## 当前版本
 
+- **v1.3.2-alpha.2**（2026-04-23）：snapshot-lost bug fix + Dashboard 用户手册 ([dashboard-guide.md](./docs/dashboard-guide.md))
 - **v1.3.2-alpha**（2026-04-23）：Dashboard live reload（SSE 实时推送 + 自动重连 + 静态降级）
 - **v1.4.0-alpha**（2026-04-22）：retro-miner 四类离线 pattern 挖掘（频次/共现/反模式/异常）
 - **v1.3.0-alpha**（2026-04-22）：Observe 层 MVP（event v1.3 schema + fs watcher + 规则引擎 + Dashboard 双视图）
 - **v1.2.0**（2026-04-22）：retro-v2 收官版（E1~E4 闭环，4/4 通用抽象落地）
 - **v0.1.0-mvp**（2026-04-21）：独立仓建立 + 三层架构 + 2 个 reference adapter + 2 个端到端 demo
+
+> 📖 v1.3.x 系列阶段性总结：[`docs/milestones/2026-04-v1.3.x-summary.md`](./docs/milestones/2026-04-v1.3.x-summary.md)
+
+---
+
+## 下一阶段（2026-04 末 ~ Q2）· 观察层从"能看"到"能用"
+
+主线：**工具产出的数据本身开始成为价值载体**。
+
+| # | 里程碑 | 目标 | 投入 | 依赖 | 状态 |
+|---|--------|------|------|------|------|
+| A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag，发布到 ROADMAP 稳定轨道 | 10 分钟 | 无 | 🟡 待做 |
+| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 1–2 小时 | A | 🟡 待定场景 |
+| B | retro-miner 跑真实 trace | 验证 4 类挖掘算法的 precision/recall 在真实数据上是否成立 | 1–2 小时 | E' | 🟡 待做 |
+| C | Dashboard 接入 retro-miner 结果 | 把挖掘出的 pattern / anti-pattern 可视化 | 半天 | B | 🟡 待做 |
+| D | E5 trace-verifier 契约 v0.1 | 用 B 积累的真实 pattern 反推契约规则（避免 retro-v1 老路） | 半天 | B + 真实数据 | 🟡 待做 |
+
+### E' 场景候选（待拍板）
+
+| 候选 | 优点 | 缺点 |
+|------|------|------|
+| 自举：给 pl-pipeline-standalone 加一个小功能 | 工具链就位 | 业务特征不典型 |
+| 跑 `examples/demo-nextjs-todo` | 已有资产，立等可用 | 只复演，无新业务 |
+| 新建一个独立小项目（如 markdown parser） | 最干净 | 需先建项目 |
+
+**用户已明确否决**："不选 KuiklyPolyCity"——Kuikly 迁移场景事件偏 `artifact.*`，
+不够代表通用 pipeline 使用。
 
 ---
 
