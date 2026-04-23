@@ -296,6 +296,7 @@ v1.7 把这"另一半"补全成了完整的双向闭环：
 - adapter 升级会打到哪些 change？→ `pl-contract-verify.sh`
 - 哪些 skill / rule / template 是高频使用，哪些 0 次？→ `_registry.yaml.adapters[*].asset_usage`
 - adapter 默默删能力或改名 → `verify` 报 broken，CI 拦截
+- 我想砍这个 capability/skill 之前先看谁在用 → `pl-contract-query.sh --capability <id>` (v1.7.1+)
 
 ### 何时记录
 
@@ -337,6 +338,7 @@ bash $PL_HOME/scripts/trace-adapter-use.sh \
 | ARCHIVE 阶段或 PR 提交前 | `bash $PL_HOME/scripts/pl-contract-aggregate.sh --check` | CI 拦截"忘了 commit pact"的 PR |
 | adapter PR 上 | `bash $PL_HOME/scripts/pl-contract-verify.sh --strict` | CI 拦截 breaking 升级 |
 | 平时调试 | `bash $PL_HOME/scripts/pl-contract-verify.sh --change <id>` | 人 |
+| adapter 砍能力前 / consumer 升级前 | `bash $PL_HOME/scripts/pl-contract-query.sh --capability <id>` | 人（决策前的事实查询，v1.7.1+） |
 
 `pl/contracts/*.yaml` **应当 commit 进 git**——它是事实账本，不是中间产物。
 diff 即可读、可 review。

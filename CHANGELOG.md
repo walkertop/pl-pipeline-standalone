@@ -22,6 +22,46 @@
 > 🤝 **2026-04-23 v1.6.x → v1.7.0 一日推完**：观察层从"事件流"升级为"契约系统"。
 > v1.6.0 让观测不可被绕过；v1.6.1 给事件加因果树 + active 时间估算 + adapter.use；
 > v1.7.0 把 adapter.use 流变成可读的 consumer pact，并在 CI 拦截会打到 consumer 的 adapter PR。
+>
+> 🔍 **2026-04-24 v1.7.1**：CDC 读侧补齐——`pl-contract-query.sh` 让 adapter 作者
+> 在「砍 capability/skill」前先看清谁在用；让 consumer 作者在升级前看清自己用了啥。
+
+---
+
+## [1.7.1] — 2026-04-24 · CDC 读侧 🔍
+
+**主题**：v1.7.0 解决了"写 pact"和"对账 pact"，但缺了"读 pact"。
+v1.7.1 补一个纯查询工具，闭合「决策前的事实陈述」环节。
+
+### 🆕 新增
+
+- **`scripts/pl-contract-query.sh`**：5 种查询模式
+  - 全局汇总（无参）—— 一眼看清本 project 有几份 pact、跨几个 adapter
+  - `--capability/--skill/--rule/--build-command/--agent <id>` —— 反查谁在用
+  - `--adapter <id>` —— 列某 adapter 的全部 consumer 与资产消费
+  - `--change <id>` —— 单 change 的友好版 pact 视图
+  - `--json` —— 任何模式都可结构化输出（CI / 脚本组合用）
+  - 可选 `--adapter <id>` 过滤具体资产查询的范围
+- **文档**：`docs/guides/adapter-authoring.md` § 12.5 加 5 个查询模式 + 与 verify 的边界
+- **agent 引导**：`assets/pl/agents/pipeline-master.md` broker 工作流表加一行 query
+
+### 🎯 设计特征
+
+- **纯读，不触发任何 verify 行为**：query 永远不报 broken/warn，它的价值在「事实陈述」
+- **零依赖扩展**：只读 `$PL_PROJECT/pl/contracts/{*.consumed.yaml,_registry.yaml}`，
+  不需要再读 adapter.yaml；对未生成 pact 的 project 友好退出
+- **跨 project 反查留给 v1.8**：当下做法是各 consumer project 自己跑 query，结果汇 release notes
+
+### 🧪 验证
+
+11 个本地 test scenario：单 demo 5 种模式 + 多 pact 聚合 + 不存在 capability + JSON 输出 + 缺 contracts dir，全过。
+两个真实 demo（nextjs / fastapi）的 query 输出与各自 `_registry.yaml` 内容互相印证。
+
+### 📦 兼容性
+
+- ✅ 0 breaking changes（纯新增脚本 + 文档）
+- ✅ pact / registry / adapter.yaml schema 全部未变
+- ✅ 老 project 无需任何调整即可用 query
 
 ---
 

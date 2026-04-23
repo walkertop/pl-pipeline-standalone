@@ -628,6 +628,111 @@ jobs:
 
 ---
 
+## 12.5 反查谁在用某个资产（pl-contract-query · v1.7+）
+
+写到 §11/§12 你会自然遇到一个问题：**adapter 想砍一个 skill / 改一个 capability，
+怎么先看清"谁在用"？** 这就是 `pl-contract-query.sh` 的角色——它不做任何 verify
+行为，只是把已经聚合好的 pact + registry 反向格式化展示。
+
+### 12.5.1 数据源
+
+读取 `$PL_PROJECT/pl/contracts/`：
+- `_registry.yaml` — 全局反向索引（aggregate 时维护）
+- `<change>.consumed.yaml` — 每个 change 的 pact
+
+→ pl-contract-query **只查本 project 内的** pact。跨 project 反查（"全公司谁在用 typecheck？"）
+是 v1.8+ 的话题。当下做法：每个 consumer project 自己跑一次 query，结果汇总到 release notes。
+
+### 12.5.2 5 种查询模式
+
+```bash
+# 0) 全局汇总（最常用，0 参数）
+$ pl-contract-query.sh
+━━━ Contract Summary ━━━
+  1 pact(s) across 1 adapter(s)
+
+  adapter                  pacts   caps  skl  rul  bld  agt
+  nextjs-web                   1      5    4    3    0    2
+
+# 1) 反查 capability（adapter 想砍/改前必跑）
+$ pl-contract-query.sh --capability typecheck
+━━━ Query: capability/typecheck ━━━
+  1 consumer(s) found in 1 pact(s)
+
+  change            adapter             uses  phases    last_seen
+  add-todo-list     nextjs-web@0.1.0       1  VERIFY    2026-04-23T18:47:59Z
+
+# 2) 反查具体 skill / rule / build_command / agent（同结构）
+$ pl-contract-query.sh --skill react-server-components
+$ pl-contract-query.sh --rule typescript-strict
+$ pl-contract-query.sh --build-command compile_check
+$ pl-contract-query.sh --agent nextjs-architect
+
+# 3) 列某 adapter 的全部 consumer（adapter 作者升级前快速确认范围）
+$ pl-contract-query.sh --adapter nextjs-web
+━━━ Adapter: nextjs-web ━━━
+  1 consumer pact(s)
+
+  ■ add-todo-list  (14 events)
+      capabilities: app-router-routing, lint, rsc-rendering, server-action-support, typecheck
+      skills: nextjs-app-router, nextjs-data-fetching, nextjs-performance, react-server-components
+      rules: nextjs-revalidate-for-non-fetch, react-hooks, typescript-strict
+      agents: nextjs-architect, nextjs-reviewer
+
+# 4) 单 change 的友好版 pact 视图（review 一个 change 用了什么）
+$ pl-contract-query.sh --change add-todo-list
+
+# 5) 任何模式都可加 --json（CI / 脚本组合）
+$ pl-contract-query.sh --capability typecheck --json
+{
+  "apiVersion": "piao.dev/v1",
+  "kind": "ContractQueryReport",
+  "query": { "kind": "capability", "id": "typecheck", "adapter_filter": null },
+  "hit_count": 1,
+  "hits": [ { "change_id": "add-todo-list", ... } ]
+}
+```
+
+可选 `--adapter <id>` 过滤：当多个 adapter 巧合提供同名资产时，限定查询范围。
+
+### 12.5.3 典型工作流
+
+**adapter 作者「我想删 skill X」**：
+```bash
+# 在 adapter 仓库里（vendor 一份 pl-pipeline，或 submodule）
+PL_HOME=$PWD/vendor/pl-pipeline PL_PROJECT=$PWD/examples/some-consumer \
+  bash $PL_HOME/scripts/pl-contract-query.sh --skill X
+# 0 hits → 安全删；>0 hits → 先发 capability 抽象 + deprecated_in
+```
+
+**consumer 作者「我升级 adapter 之前要看自己用了啥」**：
+```bash
+pl-contract-query.sh --change <my-change>
+# 对照 adapter 新版的 release note 看哪些资产被 deprecate
+```
+
+### 12.5.4 退出码
+
+| code | 含义 |
+|---|---|
+| 0 | 查询完成（命中 0 条也算成功） |
+| 1 | 找不到 contracts 目录 / pact 文件损坏 |
+| 2 | 参数错误（如多个 `--skill/--rule/...` 同时传） |
+
+### 12.5.5 与 verify 的边界
+
+|  | aggregate | verify | **query** |
+|---|---|---|---|
+| 写 pact | ✅ | ❌ | ❌ |
+| 读 pact | ❌ | ✅ | ✅ |
+| 读 adapter.yaml | ❌ | ✅ | ❌ |
+| 报告 broken/warn | ❌ | ✅ | ❌ |
+| **格式化展示** | ❌ | 部分 | ✅ |
+
+→ query 是纯读 + 纯展示，**永远不会触发 broken/warn**。它的价值在"决策前的事实陈述"。
+
+---
+
 ## 13. 发布 checklist
 
 当你准备好贡献一个新 adapter 时：
