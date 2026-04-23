@@ -31,6 +31,7 @@ import mimetypes
 import os
 import queue
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -46,6 +47,17 @@ STATE = {
     "dash_dir": None,     # Path: 静态文件根
     "trace_dir": None,    # Path | None
     "data_file": None,    # Path: _data.json
+    "pl_home": None,      # Path | None: pl-pipeline 安装根（用于跑 pl-contract-verify.sh）
+    "pl_project": None,   # Path | None: 宿主项目根（PL_PROJECT）
+    "contracts_dir": None,  # Path | None: <project>/pl/contracts，contracts 不存在则 endpoint 直接返回空报告
+}
+
+# /_data/contracts.json 的轻量缓存（避免每帧都跑 verify）
+CONTRACTS_CACHE = {
+    "ts": 0.0,
+    "payload": None,
+    "lock": threading.Lock(),
+    "ttl_sec": 3.0,
 }
 
 # 每个 change 一个 Broadcaster，index 视图也有一个
@@ -353,6 +365,133 @@ def get_index_broadcaster():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Contracts 视图（/_data/contracts.json）
+# ─────────────────────────────────────────────────────────────────────────────
+def _empty_contracts_payload(reason=""):
+    """contracts dir 不存在 / pl_home 缺失等情况下返回的最小 payload。"""
+    return {
+        "apiVersion": "piao.dev/v1",
+        "kind": "ContractStatusForDashboard",
+        "available": False,
+        "reason": reason or "contracts not initialized",
+        "summary": {"total": 0, "satisfied": 0, "warn": 0, "broken": 0},
+        "by_change": {},
+    }
+
+
+def _compute_contracts_payload():
+    """跑 pl-contract-verify.sh --json，把结果削减成 dashboard 需要的形态。
+
+    削减规则（前端只需要"卡片角标"够用，不要把 violations 全表都喂上）：
+      by_change[<id>] = {
+        status:           'satisfied' | 'warn' | 'broken',
+        adapter:          'adapter-id',
+        adapter_version:  '0.1.0',
+        warn_count:       int,
+        broken_count:     int,
+        # 前 3 条简短摘要给 tooltip 用
+        broken_examples:  ['skill/foo missing', ...],
+        warn_examples:    ['capability/bar deprecated_in 0.2.0', ...],
+      }
+    """
+    pl_home = STATE.get("pl_home")
+    pl_project = STATE.get("pl_project")
+    contracts_dir = STATE.get("contracts_dir")
+
+    if pl_home is None or pl_project is None:
+        return _empty_contracts_payload("dashboard server 没拿到 --pl-home / --pl-project")
+
+    # contracts 目录不存在：合法的"还没产生 pact"状态，前端不应该报错
+    if contracts_dir is None or not contracts_dir.exists():
+        return _empty_contracts_payload("no pacts yet (run pl-runner.sh through ARCHIVE)")
+
+    verify_script = pl_home / "scripts" / "pl-contract-verify.sh"
+    if not verify_script.exists():
+        return _empty_contracts_payload(f"pl-contract-verify.sh not found at {verify_script}")
+
+    env = dict(os.environ)
+    env["PL_HOME"] = str(pl_home)
+    env["PL_PROJECT"] = str(pl_project)
+
+    try:
+        proc = subprocess.run(
+            ["bash", str(verify_script), "--json"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        return _empty_contracts_payload("pl-contract-verify.sh timeout (>15s)")
+    except Exception as e:  # pragma: no cover - 防御
+        return _empty_contracts_payload(f"failed to run verify: {e}")
+
+    # exit 2 = 解析错误；exit 0/1 都是合法 JSON（1=有 broken）
+    if proc.returncode == 2:
+        return _empty_contracts_payload(
+            f"verify returned exit 2: {(proc.stderr or '').strip()[:200]}"
+        )
+
+    try:
+        report = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        return _empty_contracts_payload(f"verify output not JSON: {e}")
+
+    by_change = {}
+    for r in report.get("reports", []):
+        cid = r.get("change_id")
+        if not cid:
+            continue
+        violations = r.get("violations", []) or []
+        warnings = r.get("warnings", []) or []
+        by_change[cid] = {
+            "status": r.get("status", "satisfied"),
+            "adapter": r.get("adapter") or "",
+            "adapter_version": r.get("adapter_version") or "",
+            "broken_count": len(violations),
+            "warn_count": len(warnings),
+            "broken_examples": [
+                f"{v.get('kind','?')}/{v.get('id','?')}"
+                for v in violations[:3]
+            ],
+            "warn_examples": [
+                f"{w.get('kind','?')}/{w.get('id','?')}"
+                for w in warnings[:3]
+            ],
+        }
+
+    return {
+        "apiVersion": "piao.dev/v1",
+        "kind": "ContractStatusForDashboard",
+        "available": True,
+        "reason": "",
+        "summary": report.get("summary") or {
+            "total": len(by_change),
+            "satisfied": sum(1 for v in by_change.values() if v["status"] == "satisfied"),
+            "warn": sum(1 for v in by_change.values() if v["status"] == "warn"),
+            "broken": sum(1 for v in by_change.values() if v["status"] == "broken"),
+        },
+        "by_change": by_change,
+    }
+
+
+def get_contracts_payload(force=False):
+    """带 TTL 缓存的入口。dashboard 拉得很频繁，verify 串 yaml 解析又不便宜，必须缓存。"""
+    now = time.time()
+    with CONTRACTS_CACHE["lock"]:
+        if (
+            not force
+            and CONTRACTS_CACHE["payload"] is not None
+            and (now - CONTRACTS_CACHE["ts"]) < CONTRACTS_CACHE["ttl_sec"]
+        ):
+            return CONTRACTS_CACHE["payload"]
+        payload = _compute_contracts_payload()
+        CONTRACTS_CACHE["payload"] = payload
+        CONTRACTS_CACHE["ts"] = now
+        return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # HTTP handler
 # ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
@@ -454,6 +593,9 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/_events/index":
                 self._handle_stream_index()
                 return
+            if p == "/_data/contracts.json":
+                self._handle_contracts_json()
+                return
 
             # 默认：静态文件
             self._send_static(p)
@@ -469,6 +611,22 @@ class Handler(BaseHTTPRequestHandler):
         """一次性 SSE：回一个 ok 然后关闭。前端用来探测 SSE 能力。"""
         self._write_sse_headers()
         self._send_sse({"ok": True, "ts": time.time()}, event="ping")
+
+    def _handle_contracts_json(self):
+        """普通 JSON 端点（不是 SSE）。前端 fetch 一次或定期 poll。"""
+        try:
+            payload = get_contracts_payload()
+        except Exception as e:  # pragma: no cover - 防御
+            payload = _empty_contracts_payload(f"server error: {e}")
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        # 前端会自己节流；服务端这里也禁缓存让浏览器拿到最新值
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _handle_stream_change(self, change_id):
         bc = get_change_broadcaster(change_id)
@@ -527,11 +685,21 @@ def main():
     ap.add_argument("--data-file", required=True)
     ap.add_argument("--port", type=int, default=8889)
     ap.add_argument("--bind", default="127.0.0.1")
+    # v1.7.2 新增：用于 /_data/contracts.json 跑 pl-contract-verify.sh
+    # 缺省时 contracts 端点降级返回 available:false（不影响其它功能）
+    ap.add_argument("--pl-home", default="")
+    ap.add_argument("--pl-project", default="")
+    ap.add_argument("--contracts-dir", default="")
     args = ap.parse_args()
 
     STATE["dash_dir"] = Path(args.dash_dir).resolve()
     STATE["trace_dir"] = Path(args.trace_dir).resolve() if args.trace_dir else None
     STATE["data_file"] = Path(args.data_file).resolve()
+    STATE["pl_home"] = Path(args.pl_home).resolve() if args.pl_home else None
+    STATE["pl_project"] = Path(args.pl_project).resolve() if args.pl_project else None
+    STATE["contracts_dir"] = (
+        Path(args.contracts_dir).resolve() if args.contracts_dir else None
+    )
 
     def on_sig(signum, frame):
         SHUTDOWN.set()
@@ -560,8 +728,11 @@ def main():
     server.handle_error = _quiet_handle_error
     print(f"[dashboard-server] http://{args.bind}:{args.port} (live reload via SSE)",
           file=sys.stderr, flush=True)
-    print(f"[dashboard-server]   dash_dir : {STATE['dash_dir']}", file=sys.stderr)
-    print(f"[dashboard-server]   trace_dir: {STATE['trace_dir']}", file=sys.stderr)
+    print(f"[dashboard-server]   dash_dir     : {STATE['dash_dir']}", file=sys.stderr)
+    print(f"[dashboard-server]   trace_dir    : {STATE['trace_dir']}", file=sys.stderr)
+    print(f"[dashboard-server]   pl_home      : {STATE['pl_home']}", file=sys.stderr)
+    print(f"[dashboard-server]   pl_project   : {STATE['pl_project']}", file=sys.stderr)
+    print(f"[dashboard-server]   contracts_dir: {STATE['contracts_dir']}", file=sys.stderr)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

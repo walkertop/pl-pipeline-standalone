@@ -25,6 +25,61 @@
 >
 > 🔍 **2026-04-24 v1.7.1**：CDC 读侧补齐——`pl-contract-query.sh` 让 adapter 作者
 > 在「砍 capability/skill」前先看清谁在用；让 consumer 作者在升级前看清自己用了啥。
+>
+> 📺 **2026-04-24 v1.7.2**：CDC 进 Dashboard——pact 状态从 CLI 出现到首页角标，
+> 每个 change 卡片自带 `pact ✓ / ! N / ✗ N` badge，顶部一行 `CDC contracts` 汇总，
+> ARCHIVE auto-aggregate 后秒级自动刷新。让"契约健康度"成为日常可见的指标。
+
+---
+
+## [1.7.2] — 2026-04-24 · CDC 进 Dashboard 📺
+
+**主题**：v1.7.0/v1.7.1 让 pact 写入、对账、读出，但状态仍只在 CLI 里。
+v1.7.2 把它接到 dashboard 上——每天看 dashboard 的人，再不需要主动跑 verify
+就能看到「我这条 change 的契约健不健康」。
+
+### 🆕 新增
+
+- **Dashboard server 新端点 `GET /_data/contracts.json`**
+  （`scripts/_lib/dashboard-server.py`）
+  - 内部 shell out 到 `pl-contract-verify.sh --json`，削减成「卡片角标够用」的形态：
+    `{ status, adapter, adapter_version, broken_count, warn_count, broken_examples[≤3], warn_examples[≤3] }`
+  - **3 秒 TTL 缓存**，避免每帧 fetch 都跑 yaml 解析
+  - 非阻塞失败：`pl-home/pl-project` 缺失、contracts dir 不存在、verify 超时 / 报错 → 返回
+    `{ available: false, reason: "..." }` 合法 JSON，前端识别后直接不渲染角标
+- **首页卡片角标**（`dashboard/index.html`）
+  - `pact ✓ / pact ! N / pact ✗ N` 三态，复用现有 `badge-green/yellow/red`，零 CSS 新增
+  - tooltip（`title=`）列出前 3 条 `kind/id` + adapter@version
+  - 顶部一行 `CDC contracts ✓ N satisfied · ! M warn · ✗ K broken across X changes` 汇总
+- **自动刷新**：收到 `_events/index updated` 推送时自动重 fetch contracts.json，
+  ARCHIVE 触发 auto-aggregate 后角标在几秒内跳转
+- **`scripts/pl-dashboard.sh`** 把 `--pl-home / --pl-project / --contracts-dir` 透传给 server
+- **文档**：`docs/dashboard-guide.md` 新增「Contract 角标」一节 + 技术对照表加一行
+
+### 🎯 设计特征
+
+- **零侵入**：现有 dashboard 任何视图都不变；contracts dir 不存在的老 project 不会因此报错
+- **零 CSS 新增**：复用 v1.3 已有 `badge-{green,yellow,red}`，一致的暗/亮色适配
+- **架构上仍然是 server-side verify**：浏览器里不解析 yaml，避免把 PyYAML 模拟打包进前端
+- **跟 SSE 解耦**：contracts 走普通 JSON + 节流，不走 EventSource，逻辑简单可缓存
+
+### 🧪 验证
+
+5 个本地 scenario，全部通过：
+1. nextjs demo 启动 → 端点返回 `add-todo-list satisfied (nextjs-web@0.1.0)`，浏览器卡片显示 `pact ✓`
+2. fastapi demo 启动 → 端点返回 `add-users-api satisfied (python-fastapi@0.1.0)`，行为一致
+3. 删除 `react-server-components` skill → 4 秒后端点跳到 `broken=1`，浏览器卡片切到 `pact ✗ 1`
+4. 恢复 adapter → 4 秒后切回 `satisfied`，浏览器卡片切回 `pact ✓`
+5. 不传 `--pl-home/--contracts-dir` 启动 → 端点 `available:false, reason: "dashboard server 没拿到 --pl-home / --pl-project"`，浏览器无角标无报错
+
+均使用真实 dashboard server（不是 mock）+ 真实 demo project + Chrome 渲染。
+
+### 📦 兼容性
+
+- ✅ 0 breaking changes
+- ✅ 旧 dashboard 用法（`pl-dashboard.sh` 不传 contracts 参数）继续可用
+- ✅ pact / registry / adapter.yaml schema 全部未变
+- ✅ `--static-only` 模式仍工作，只是没有 contract 角标（端点不存在，前端兜底）
 
 ---
 
