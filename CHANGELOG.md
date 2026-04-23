@@ -18,6 +18,141 @@
 >
 > 📖 本版同时新增辩证方法论文档：[`docs/guides/working-with-fuzzy-intent.md`](./docs/guides/working-with-fuzzy-intent.md)
 > —— 教用户怎么用格式化工具而不被它框死。
+>
+> 🤝 **2026-04-23 v1.6.x → v1.7.0 一日推完**：观察层从"事件流"升级为"契约系统"。
+> v1.6.0 让观测不可被绕过；v1.6.1 给事件加因果树 + active 时间估算 + adapter.use；
+> v1.7.0 把 adapter.use 流变成可读的 consumer pact，并在 CI 拦截会打到 consumer 的 adapter PR。
+
+---
+
+## [1.7.0] — 2026-04-23 · CDC 双向闭环 🤝
+
+**主题**：把 v1.6 的 `adapter.use` 事件流升级为可读、可校验、可在 CI 拦截 PR 的契约系统。
+
+### ✨ 里程碑级变化
+
+- **CDC broker 三件套上线**：`adapter.use`（记录）→ `pl-contract-aggregate.sh`（沉淀）→ `pl-contract-verify.sh`（对账）
+- **首次让 adapter 升级"不能默默打到 consumer"**：CI 阶段就能看到哪些 change 会因 PR 而 broken
+- **`provides.capabilities[]`**：在 adapter.yaml 里增加抽象层，吸收内部 skill/rule 改名
+
+### 🆕 新增
+
+#### CDC broker 脚本（`scripts/`）
+
+- **`pl-contract-aggregate.sh`**：扫描 `pipeline-output/trace/*.events.jsonl` 的 `adapter.use` 事件，
+  按 `change_id` 聚合为 `pl/contracts/<change>.consumed.yaml`（per-change pact），并维护
+  跨 change 的反向索引 `pl/contracts/_registry.yaml`
+  - 支持 `--change <id>` 单 change 聚合 / `--check` 干跑 diff（CI 拦"漏 commit pact"）/ `--json` 摘要
+  - 时间戳剥离 → 幂等 diff
+  - 自实现 yaml emitter，零 PyYAML 依赖（CI 装 pyyaml 仅用于 verify）
+
+- **`pl-contract-verify.sh`**：拿 pact 对账当前 `adapter.yaml`，输出 satisfied / warn / broken
+  - `--strict` 模式：warn 也按 1 退出（CI 用）
+  - 处理 `backed_by: null` / `deprecated_in` / `removed_in` 三种 capability 演进语义
+  - 简易 semver 比较（仅 major.minor.patch，已覆盖 v1.7 全部用例）
+
+#### 契约 schema（`assets/pl/schemas/`）
+
+- `consumer-contract.schema.json`：单个 change 的 pact，记录消费的 templates / skills / rules / agents / build_commands / capabilities，每条带 uses / first_seen / last_seen / phases
+- `contract-registry.schema.json`：全局注册表，支持反查"哪些 change 在用某 adapter"
+
+#### `provides.capabilities[]` 抽象层
+
+- adapter.yaml 新增可选 `provides.capabilities[]` 数组，每条声明一个 abstract capability id（如 `typecheck` / `server-action-support`），通过 `backed_by` 指向真实实现（skill / rule / build_command / null）
+- 支持 `since` / `deprecated_in` / `removed_in` 字段，让 capability 优雅演进
+- 完整文档：[`docs/guides/adapter-authoring.md` §3.4](./docs/guides/adapter-authoring.md)
+- 示例迁移：[`adapters/adapter-nextjs-web/adapter.yaml`](./adapters/adapter-nextjs-web/adapter.yaml) 声明 9 条 capability，含一条 `backed_by: null`（smoke-probe）
+
+### 🔧 流水线集成
+
+- **pl-runner.sh**：gate 通过且 `GATE_TO=ARCHIVE` 时自动调 `pl-contract-aggregate.sh --change <id>`，输出末尾提示 `git add pl/contracts/...`。失败只 warn 不阻断（观测层永不能成为流水线故障源）
+- **pipeline-master.md**：ARCHIVE 阶段提示词加 v1.7 自动聚合说明 + 提交 pact 强约束；新增"何时跑 broker"触发表 + 完整双向 CDC 流程图
+- **`.github/workflows/ci.yml`**：新增 Job 6 `cdc-broker-smoke`，3 个 scenario（happy path / broken pact / `--check` 幂等），自包含 fixture，本地 + CI 同样行为
+
+### 📚 文档
+
+- `docs/guides/adapter-authoring.md` 新增 §12 "在 consumer 项目里启用契约校验"：
+  - §12.1 consumer 项目侧 GitHub Actions snippet
+  - §12.2 adapter 仓库侧 cross-consumer matrix snippet
+  - §12.3 退出码 → CI 行为映射表
+  - §12.4 4 类最常见拦截场景
+
+### 📊 验证矩阵
+
+| 维度 | 验证 |
+|---|---|
+| broker 三件套基础正确性 | 8 个本地 E2E case 全绿（B1+B2+B3） |
+| ARCHIVE 钩子 | 2/2：ARCHIVE gate 触发、非 ARCHIVE gate 不触发 |
+| CI 三 scenario | 3/3 本地复现全绿 |
+| 幂等 | 第二次 aggregate `--check` exit 0 |
+| `--strict` 拦截 | broken pact 准确 exit 1，含详细 reason |
+
+### 🎯 设计取舍
+
+- **broker 用脚本而不是服务**：`bash + git` 比独立 HTTP/DB broker 简单一个数量级，pact 沉淀进 git 也天然有审计、回放、code review
+- **触发点放 pl-runner 而不是 pipeline-master**：脚本是确定执行的，agent prompt 容易漏 follow。结构性强约束 > 文档约束
+- **`backed_by: null` 是一等公民**：明确"这个 capability 我不支持"比沉默更重要——sane consumer 看到 null + reason 就会自己绕开
+
+### 🔗 相关 commit
+
+`8e125e5` broker 聚合 · `1baeea7` capabilities 抽象 · `627640a` verify 对账
+`6a7ca3d` ARCHIVE 钩子 · `6baf997` CI 接入 + 文档
+
+---
+
+## [1.6.1] — 2026-04-23 · trace span 因果树 + active 时间统计代理 🌳
+
+**主题**：让"监督 Agent 生产过程"这件事真正可被看清——按因果链回放、按密度估算 active 时间、补齐 adapter 消费观测。
+
+### 🆕 新增
+
+- **trace 信封补齐 `change_id`**：event-v1.3.schema.json 早把它列为 required，本次让 trace_emit 真的写。多文件聚合 / broker / 跨工具消费不再依赖文件名做关联
+- **span 栈 + 自动父子关系**：trace-emit.sh 新增 `_SPAN_STACK`，phase/gate/task 开始 push、结束 pop。中间 emit 的 point 事件（check.run / adapter.use / artifact.*）自动从栈顶继承 `parent_span_id`，因果链不再依赖人手维护注释
+- **新辅助函数**：`trace_gate_start` / `trace_gate_end`，pl-runner.sh + pl-smoke.sh 全部裸 emit 迁移
+- **`pl-trace-tree.sh`**：按 span 渲染因果树，point 事件挂父 span 下；`--no-points` / `--json` / `--file` 任意 jsonl
+- **`pl-active-time.sh`**：用事件密度做 active vs wall 时间估算代理；默认 5min idle 阈值，支持 `--by-phase`；显式说明这是估计、安全失败方向是低估
+- **`adapter.use` 事件类型 + 配套工具**：trace-emit.sh `trace_adapter_use()` 自动读 `.pl-adapter.yaml` id/version；pl-runner.sh check.cmd 引用 `${PL_*}` env 时自动 emit；CLI `trace-adapter-use.sh` 给 agent / 脚本手动记录
+
+### 📐 观测系统设计原则（pipeline-master.md 新增章节）
+
+明文写入今后扩展事件 schema 必须遵守的硬约束，避免噪声字段污染数据：
+1. 字段必须有真实可获得的数据源（不为 cost/token 盖楼）
+2. 事件必须能稳定 emit，不依赖 LLM 自觉（用脚本/统计代理代替自报）
+
+### 🔧 兼容
+
+- macOS bash 3.2 友好（不用 `declare -g`）
+- pl-runner.sh / pl-smoke.sh 的裸 `trace_emit gate.*` 全部统一迁移到 span 版
+
+### 🔗 相关 commit
+
+`86f9eaa` trace 信封补 change_id + span 因果树 + active 时间统计代理
+
+---
+
+## [1.6.0] — 2026-04-23 · 观测层不可被绕过 🔒
+
+**主题**：手动走阶段时观测层被绕过的问题（`.state.md` 简陋 / trace 为空），由"靠 agent 自觉"升级为"脚本兜底"。
+
+### 🆕 新增 pl-core 脚本
+
+- **`pl-state-init.sh`**：创建 change 时自动生成完整 10 章节的 `.state.md` + 初始 trace 事件（`workflow.start` + `phase.start`）
+  - 用法：`pl-state-init.sh <change-id> --name '变更名'`
+- **`pl-phase.sh`**：手动走阶段的 trace 包装命令，每条命令同时写 trace 事件 + 更新 `.state.md` History
+  - 子命令：`start` / `end` / `gate` / `task` / `check` / `artifact` / `done` / `status`
+- **`pl-observe-check.sh`**：观测完整性检查（VERIFY 阶段必跑）
+  - 检查：`.state.md` 完整性 / trace 非空 / `workflow.start` 存在 / 阶段覆盖
+  - 支持 `--strict` 模式（warn 变 error）
+
+### 📦 解决的问题
+
+- 手动走阶段时观测层被绕过（`.state.md` 简陋 / trace 为空）→ pl-state-init 兜底完整初始化
+- VERIFY 阶段无法检测观测数据缺失 → pl-observe-check 提供机械检查
+- E' retro 从工具仓迁出到目标项目内（产物跟着项目走）
+
+### 🔗 相关 commit
+
+`4fd1c33` 三个新脚本让观测层不可被绕过
 
 ---
 
