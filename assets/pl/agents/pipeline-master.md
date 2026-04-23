@@ -182,6 +182,10 @@ prompt: |
   2. 把新发现的通用 pattern 沉淀为 rule/skill
   3. 更新项目 ARCHITECTURE_SNAPSHOT.md
   4. 把 .state.md 的 stage 更新为 archived
+  5. v1.7+：pl-runner 在 ARCHIVE gate (GATE_TO=ARCHIVE) 通过后会**自动**调用
+     pl-contract-aggregate.sh，输出 pl/contracts/<change>.consumed.yaml +
+     pl/contracts/_registry.yaml。归档结束前**必须** git add 这两个文件——
+     它们是契约事实账本，不是中间产物。漏 commit 会让下次 verify --strict 误报。
 ```
 
 ---

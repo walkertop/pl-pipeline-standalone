@@ -486,6 +486,22 @@ trace_gate_end "$GATE" "$GATE_RESULT" "$(jq -nc --arg eval "$GATE_EVAL" \
   --argjson pass "$PASS" --argjson fail "$FAIL" --argjson skip "$SKIP" \
   '{eval:$eval,pass:$pass,fail:$fail,skip:$skip}')"
 
+# v1.7：ARCHIVE 阶段自动聚合 consumer pact（CDC broker）。
+# 触发条件：gate 通过 + 此 gate 进入 ARCHIVE。
+# 失败不阻断 gate 结果，只 warn——观测层不可成为流水线的故障源。
+if [[ "$GATE_RESULT" == "passed" && "$GATE_TO" == "ARCHIVE" ]]; then
+  AGG_SCRIPT="$PL_HOME/scripts/pl-contract-aggregate.sh"
+  if [[ -x "$AGG_SCRIPT" ]]; then
+    echo ""
+    echo "${DIM}─── auto: pl-contract-aggregate --change $CHANGE ───${NC}"
+    if "$AGG_SCRIPT" --change "$CHANGE" 2>&1 | sed 's/^/  /'; then
+      echo "  ${DIM}(remember to: git add pl/contracts/${CHANGE}.consumed.yaml pl/contracts/_registry.yaml)${NC}"
+    else
+      log_warn "auto-aggregate failed (non-blocking); run manually: $AGG_SCRIPT --change $CHANGE"
+    fi
+  fi
+fi
+
 echo ""
 echo "${BOLD}━━━ Summary ━━━${NC}"
 echo "  Gate $GATE: ${BOLD}$GATE_RESULT${NC}  (pass=$PASS fail=$FAIL skip=$SKIP)"
