@@ -111,7 +111,13 @@ else
     else
       git clone --depth 1 --quiet "$REPO_URL" "$PREFIX"
       # 切到最新 stable tag (pl-v* 形式)
-      LATEST=$(cd "$PREFIX" && git ls-remote --tags --sort=-v:refname origin 'pl-v*' 2>/dev/null | head -1 | awk -F'/' '{print $NF}' | sed 's/\^{}$//')
+      # 注意：git 的 -v:refname 排序按数字比较，会把 2.0.0-alpha 排在 1.10.0 前
+      # （不符合 semver pre-release 规则），所以必须显式过滤 -alpha/-beta/-rc/-pre/-dev
+      LATEST=$(cd "$PREFIX" && git ls-remote --tags --sort=-v:refname origin 'pl-v*' 2>/dev/null \
+        | awk -F'/' '{print $NF}' \
+        | sed 's/\^{}$//' \
+        | grep -Ev -- '-(alpha|beta|rc|pre|dev)([.-]|$)' \
+        | head -1)
       if [[ -n "$LATEST" ]]; then
         ( cd "$PREFIX" && git fetch --depth 1 origin "refs/tags/$LATEST:refs/tags/$LATEST" --quiet && git checkout "$LATEST" --quiet )
         ok "切到最新 stable tag: $LATEST"

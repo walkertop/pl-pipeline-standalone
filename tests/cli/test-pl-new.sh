@@ -276,14 +276,19 @@ fi
 tc_suite "install.sh stdin (curl|bash) compatibility"
 
 tc_case "install.sh 通过 stdin 跑不应有 unbound variable"
+# 注意：用 set +e 包住，否则 GitHub Actions 的 bash -e {0} 会让 install.sh 失败
+# 直接终止整个测试脚本，看不到任何 FAIL 信息（只剩一个 "..."）
+set +e
 out=$(PL_INSTALL_NO_RC=1 PL_INSTALL_PREFIX="$WORK/stdin-test" \
       bash -c "cat $INSTALL_SH | bash" 2>&1)
+install_rc=$?
+set -e
 if [[ "$out" == *"unbound variable"* ]]; then
   tc_fail "stdin 模式触发 unbound variable: $out"
 elif [[ "$out" == *"已就绪"* ]]; then
   tc_ok
 else
-  tc_fail "stdin 模式未输出"已就绪". output: $out"
+  tc_fail "stdin 模式未输出 '已就绪' (rc=$install_rc). output: $out"
 fi
 rm -rf "$WORK/stdin-test"
 
