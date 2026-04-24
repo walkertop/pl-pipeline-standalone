@@ -345,6 +345,26 @@ diff 即可读、可 review。
 
 ---
 
+## 🏷 release / tag 纪律（v1.7.3.1+ 教训）
+
+打版本 tag（`pl-vX.Y.Z`）前**必须先确认对应 commit 在 GitHub Actions 上 CI 是绿的**：
+
+```bash
+# tag 之前
+gh run list --commit $(git rev-parse HEAD) --limit 1
+# 看到 "completed success" 才打 tag；红的话先修 CI 再 tag
+```
+
+**为什么**：v1.7.0 / 1 / 2 / 3 这 4 个 tag 都长在红 CI 上跑了 12+ 小时才被发现，
+原因是 commit 完就立刻 tag-and-push 没等 CI。tag 长在红基础上 = 历史欠债 ——
+后续要么需要 force-move tag（破坏所有已 fetch 的 client），要么发 patch tag
+（如 `pl-v1.7.3.1`）擦屁股。**事先 30 秒等 CI，胜过事后 30 分钟修历史。**
+
+如果是无法等 CI 的紧急情况（hotfix 等），明确在 commit message / changelog 里
+标注"该 tag 暂未通过 CI"，避免下游误信。
+
+---
+
 ## 📊 状态查看
 
 当用户问状态时：
