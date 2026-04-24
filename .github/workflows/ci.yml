@@ -90,14 +90,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 关键约定：adapter-validate 校验 metadata.id == basename(dir)（去掉可选的
+      # 'adapter-' 前缀），所以 CI 这里 id 必须等于 dest basename，否则 v1.5+ 起一定红。
       - name: Minimal scaffold validates
         run: |
-          bash scripts/adapter-create.sh ci-demo-min --dest /tmp/ci-min
+          bash scripts/adapter-create.sh ci-min --dest /tmp/ci-min
           bash scripts/adapter-validate.sh /tmp/ci-min
 
       - name: Full scaffold validates
         run: |
-          bash scripts/adapter-create.sh ci-demo-full --dest /tmp/ci-full --full
+          bash scripts/adapter-create.sh ci-full --dest /tmp/ci-full --full
           bash scripts/adapter-validate.sh /tmp/ci-full
 
       - name: Invalid id must fail
@@ -196,7 +198,10 @@ jobs:
 
       - name: Scenario 2 · broken pact (verify must exit 1)
         run: |
-          set -uo pipefail
+          # GitHub Actions 默认 shell 是 'bash -e {0}'，所以即使脚本里 `set -uo pipefail`
+          # 也无法关掉 -e。期望失败的命令必须用 `set +e` 显式包起来再读 $?，
+          # 跟 Scenario 3 保持一致风格，避免再被这个坑咬。
+          set -euo pipefail
           PROJ=$(mktemp -d)
           mkdir -p "$PROJ/pl/contracts"
           cat > "$PROJ/pl/contracts/ci-broken.consumed.yaml" <<'EOF'
@@ -218,8 +223,10 @@ jobs:
                 first_seen: "2026-04-23T18:00:00Z"
                 last_seen: "2026-04-23T18:00:00Z"
           EOF
+          set +e
           PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-verify.sh
           rc=$?
+          set -e
           if [[ $rc -ne 1 ]]; then
             echo "::error::expected exit 1 (broken pact uses backed_by:null capability), got $rc"
             exit 1
