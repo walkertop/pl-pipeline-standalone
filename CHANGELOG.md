@@ -48,6 +48,88 @@
 > 19 个文件、120 行变更。`adapter-create` 输出的 "next steps" / 各 adapter README /
 > dashboard 文档 / FAQ / MVP_STATUS / agent prompt 全部统一。
 > MIGRATION.md 加头部 note 不全文改（保留历史快照）。
+>
+> ✅ **2026-04-24 v1.8.3**：测试扎实——首次给 `bin/pl` CLI 加 29 个单元测试
+> （覆盖 meta-commands / 错误处理 / 命名空间路由 / 顶层映射 / argv 透传 / bash 3.2 兼容），
+> 给 CDC 加 3 个真实场景测试（demo-nextjs / demo-fastapi 全闭环 + dashboard endpoint），
+> CI 加两个新 job：`cli-smoke` + `cdc-real-scenarios`。
+> 自此 v1.8.x CLI 改一行就有 32 个测试守。**v1.8.x 收官**。
+
+---
+
+## [1.8.3] — 2026-04-24 · 测试扎实 ✅
+
+### 背景
+
+v1.8.0 - v1.8.2 把 CLI 收口 + 自吃狗粮做完了，但有一个尴尬现实：
+- `bin/pl` 没有任何单元测试，改一行可能就坏
+- CI 的 `cdc-broker-smoke` 跑的是手写 8 行最小 yaml，没覆盖 demo 真实场景
+- v1.7 → v1.8 升级 + agent prompt 改动如果回归，CI 抓不到
+
+本里程碑给所有"v1.8 已经做了的事"上测试守，让 v1.8.x 系列收官时是真的扎实。
+
+### 新增测试
+
+**`tests/_lib/runner.sh`** — 极简 shell 测试 runner（不引外部依赖，遵守 pl-pipeline 内核约束）
+- `tc_case` / `tc_ok` / `tc_fail` / `tc_skip`
+- `tc_assert_pass` / `tc_assert_exit <rc>` / `tc_assert_contains <s>` / `tc_assert_not_contains <s>`
+- 彩色输出（自动降级 CI 无 TTY 场景）
+- 末尾 summary + 列出所有 failed cases
+
+**`tests/cli/test-pl.sh`** — 29 个 case，5 个 suite：
+
+| Suite | Cases | 覆盖 |
+|---|---|---|
+| meta-commands | 7 | `--version` / `version` / `env` / `help` / `--help` / 无参 / `doctor` |
+| error-handling | 10 | unknown subcmd → exit 2、namespace 缺 verb → exit 2、bash 3.2 unbound 兼容 |
+| namespace-routing | 5 | `pl contract verify\|aggregate\|query --help` 路由可达；`pl status --self-check` |
+| top-level-mappings | 5 | `pl run\|smoke\|phase\|orchestrator\|status` 路由可达 |
+| argv-passthrough | 2 | argv 完整传到底层脚本，缺参时由底层脚本报错 |
+
+特别守住 v1.8.0 修过的 bash 3.2 + set -u 多字节字符（`${cmd}（...）`）兼容。
+
+**`tests/cli/test-cdc-real.sh`** — 3 个 case，3 个 suite：
+
+| Suite | Cases | 覆盖 |
+|---|---|---|
+| demo-nextjs-todo | 1 | trace use → aggregate → verify → query 全闭环 |
+| demo-fastapi-users | 1 | 同上（验证不是 nextjs 孤例） |
+| dashboard endpoint | 1 | dashboard-server.py 真起 → curl `/_data/contracts.json` → 含真实 pact |
+
+复制 demo 到 sandbox 跑，不污染 repo。
+
+### CI 新增 jobs
+
+`.github/workflows/ci.yml` 加两个 job：
+
+- **`cli-smoke`** — `runs-on: ubuntu-latest` → `bash tests/cli/test-pl.sh`
+- **`cdc-real-scenarios`** — `runs-on: ubuntu-latest` + py setup → `bash tests/cli/test-cdc-real.sh`
+
+老的 `cdc-broker-smoke`（手写最小 yaml）保留作快速冒烟，
+`cdc-real-scenarios`（真实 demo）作回归保险。两条互补。
+
+### 不动的部分
+
+- 原有 8 个 CI job 全部保留
+- pl-status.sh / dashboard-server.py 等核心脚本逻辑零改动
+
+### 验证
+
+本地全套：32/32 pass。
+CI：`cli-smoke` + `cdc-real-scenarios` 加入后 push，等绿打 tag。
+
+### v1.8.x 收官
+
+至此 v1.8.x 系列工作完成：
+
+| 版本 | 主题 | 内容 |
+|---|---|---|
+| v1.8.0 | 统一 CLI 收口 | bin/pl 一个入口替代 34 个脚本 |
+| v1.8.1 | 文档真实化 | 删 6 个死链、删 v2.0 画饼、修 dirs[@] bug |
+| v1.8.2 | 自吃狗粮 | agent / docs / CI 全切到 pl CLI（19 文件） |
+| v1.8.3 | 测试扎实 | 32 个测试 + 2 个 CI job 守 v1.8.x |
+
+下一步方向（未承诺时间，看 issue）：v1.9 / v2.0 路线。
 
 ---
 
