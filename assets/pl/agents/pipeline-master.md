@@ -365,6 +365,19 @@ gh run list --commit $(git rev-parse HEAD) --limit 1
 
 ---
 
+## 🌐 distribution / install 纪律（v1.9.0 教训）
+
+任何 `curl ... | bash` / `wget ... | bash` 的安装链路 **要求仓库是 public**。
+建议安装新方案前先 `gh api repos/<owner>/<name> --jq '.private'` 自查：
+- `false` → curl|bash 可用
+- `true`  → 必须用 `gh repo clone` / `git clone git@github.com:...` + 本地 install.sh
+
+**为什么**：v1.9.0 发布时仓库尚 private，用户跑示例 curl 必 404。raw.githubusercontent.com
+对私有仓的匿名 GET 一律返回 404（不是 401，因为 GitHub 不愿暴露存在性）。
+这种"看似奇怪的 404"很难凭直觉定位，**事先一行 visibility check 胜过事后 debug HTTP**。
+
+---
+
 ## 📊 状态查看
 
 当用户问状态时：
