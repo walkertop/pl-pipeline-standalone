@@ -197,4 +197,95 @@ else
 fi
 
 # ----------------------------------------------------------------------
+# Suite 5: --here on existing git project（v1.9.1 新加 safety）
+# ----------------------------------------------------------------------
+tc_suite "pl new --here on existing project"
+
+# 模拟用户已有项目：自带 .gitignore / README.md / src/ / .git
+mock_existing_proj() {
+  local p="$1"
+  mkdir -p "$p/src"
+  cd "$p"
+  git init -q 2>/dev/null
+  echo "node_modules/" > .gitignore
+  echo "my-secret/" >> .gitignore
+  echo "# My Existing Project" > README.md
+  echo "console.log('hi');" > src/index.js
+  cd - >/dev/null
+}
+
+tc_case "--here 不覆盖已有 .gitignore（append 而非重写）"
+proj="$WORK/existing-proj-1"
+mock_existing_proj "$proj"
+( cd "$proj" && "$PL" new my-existing --here --stack bare --no-init >/dev/null 2>&1 )
+if grep -q "my-secret/" "$proj/.gitignore" && grep -q "pipeline-output/" "$proj/.gitignore"; then
+  tc_ok
+else
+  tc_fail "用户的 my-secret/ 规则丢了，或 pl 规则没 append"
+fi
+
+tc_case "--here 不覆盖已有 README.md"
+if [[ "$(head -1 "$proj/README.md")" == "# My Existing Project" ]]; then
+  tc_ok
+else
+  tc_fail "README 被覆盖了"
+fi
+
+tc_case "--here 不动用户已有的 src/"
+if [[ "$(cat "$proj/src/index.js")" == "console.log('hi');" ]]; then
+  tc_ok
+else
+  tc_fail "src/index.js 被改了"
+fi
+
+tc_case "--here 创建了 pl/config.yaml"
+if [[ -f "$proj/pl/config.yaml" ]]; then
+  tc_ok
+else
+  tc_fail "pl/config.yaml 没建"
+fi
+
+tc_case "--here 不重新 git init（保留已有 .git）"
+proj2="$WORK/existing-proj-2"
+mock_existing_proj "$proj2"
+( cd "$proj2" && git config user.email "t@t.com" && git config user.name "t" && \
+  git add -A && git commit -q -m "initial" 2>/dev/null )
+ORIG_COMMIT=$(cd "$proj2" && git log -1 --format=%H)
+( cd "$proj2" && "$PL" new whatever --here --stack bare --no-init >/dev/null 2>&1 )
+NEW_COMMIT=$(cd "$proj2" && git log -1 --format=%H 2>/dev/null)
+if [[ "$ORIG_COMMIT" == "$NEW_COMMIT" ]]; then
+  tc_ok
+else
+  tc_fail "git 历史变了，pl new 不应碰 .git"
+fi
+
+tc_case "--here --stack nextjs 用 safe_cp 不覆盖已有 package.json"
+proj3="$WORK/existing-proj-3"
+mock_existing_proj "$proj3"
+echo '{"name":"my-existing","version":"99.99.99"}' > "$proj3/package.json"
+( cd "$proj3" && "$PL" new whatever --here --stack nextjs --no-init >/dev/null 2>&1 )
+if grep -q "99.99.99" "$proj3/package.json"; then
+  tc_ok
+else
+  tc_fail "用户的 package.json 被覆盖"
+fi
+
+# ----------------------------------------------------------------------
+# Suite 6: install.sh curl|bash 兼容（v1.9.1 BASH_SOURCE fix）
+# ----------------------------------------------------------------------
+tc_suite "install.sh stdin (curl|bash) compatibility"
+
+tc_case "install.sh 通过 stdin 跑不应有 unbound variable"
+out=$(PL_INSTALL_NO_RC=1 PL_INSTALL_PREFIX="$WORK/stdin-test" \
+      bash -c "cat $INSTALL_SH | bash" 2>&1)
+if [[ "$out" == *"unbound variable"* ]]; then
+  tc_fail "stdin 模式触发 unbound variable: $out"
+elif [[ "$out" == *"已就绪"* ]]; then
+  tc_ok
+else
+  tc_fail "stdin 模式未输出"已就绪". output: $out"
+fi
+rm -rf "$WORK/stdin-test"
+
+# ----------------------------------------------------------------------
 tc_summary

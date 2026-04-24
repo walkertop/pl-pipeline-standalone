@@ -96,6 +96,15 @@ esac
 if $HERE; then
   TARGET="$PWD"
   log "在当前目录就地初始化: ${TARGET}（显示名: ${NAME}）"
+  # --here 模式安全提示：非 bare 会从 demo 拷代码，已有项目可能不需要
+  if [[ "${STACK}" != "bare" ]]; then
+    warn "--here + --stack ${STACK}: 会拷示例代码到当前目录（已有同名文件会保留不动）"
+    warn "如果你只想给已有项目装 pl-pipeline 接入层，推荐: pl new <any-name> --here --stack bare"
+  fi
+  # --here 默认不要 git init（已有项目通常已有 git）
+  if [[ -d "${TARGET}/.git" ]]; then
+    NO_GIT=true
+  fi
 else
   # 支持绝对路径和相对路径
   case "${NAME}" in
@@ -124,30 +133,67 @@ log "技术栈: ${C_BLD}${STACK}${C_OFF}"
 log "目标:   ${TARGET}"
 
 # ---- 准备骨架 ----
-prepare_bare() {
-  mkdir -p "${TARGET}/pl/changes"
-  cp "${PL_HOME}/assets/pl/config.default.yaml" "${TARGET}/pl/config.yaml"
-  cat > "${TARGET}/.gitignore" <<'GIT'
-pipeline-output/
-node_modules/
-.next/
-__pycache__/
-*.pyc
-.venv/
-.uv/
-.DS_Store
-GIT
+# 在已有项目上跑 --here 时，必须保护用户已有文件不被覆盖。
+# 把 pl-pipeline 关心的 ignore 规则 append 到已有 .gitignore（去重）；
+# 没有则创建一份。
+ensure_gitignore() {
+  local gi="${TARGET}/.gitignore"
+  local lines=("pipeline-output/" "node_modules/" ".next/" "__pycache__/" "*.pyc" ".venv/" ".uv/" ".DS_Store")
+  if [[ ! -f "$gi" ]]; then
+    printf '%s\n' "${lines[@]}" > "$gi"
+    return
+  fi
+  # 已有 .gitignore：仅 append 缺失的行（保护用户已有规则）
+  local appended=0
+  local marker="# >>> pl-pipeline >>>"
+  if ! grep -qF "$marker" "$gi"; then
+    {
+      echo ""
+      echo "$marker"
+      for l in "${lines[@]}"; do
+        if ! grep -qxF "$l" "$gi"; then
+          echo "$l"
+          appended=1
+        fi
+      done
+      echo "# <<< pl-pipeline <<<"
+    } >> "$gi"
+    if [[ $appended -eq 1 ]]; then
+      log "已 append pl-pipeline 规则到现有 .gitignore（保留你的规则）"
+    fi
+  fi
 }
 
+prepare_bare() {
+  mkdir -p "${TARGET}/pl/changes"
+  if [[ -f "${TARGET}/pl/config.yaml" ]]; then
+    log "${TARGET}/pl/config.yaml 已存在，保留不覆盖"
+  else
+    cp "${PL_HOME}/assets/pl/config.default.yaml" "${TARGET}/pl/config.yaml"
+  fi
+  ensure_gitignore
+}
+
+# tar xf 用 -k (keep-old-files) 保护已有同名文件不被覆盖
 prepare_from_example() {
   local src="$1"
   local example_dir="${PL_HOME}/examples/$src"
   [[ -d "$example_dir" ]] || die "找不到示例: $example_dir（pl-pipeline 安装可能损坏）"
-  log "从示例复制骨架: examples/$src/"
-  # cp 内容到 TARGET（注意 .gitignore 等隐藏文件）
-  ( cd "$example_dir" && tar cf - --exclude='pipeline-output' --exclude='.git' . ) | ( cd "${TARGET}" && tar xf - )
+  log "从示例复制骨架: examples/$src/（已存在的同名文件会被保留不覆盖）"
+  ( cd "$example_dir" && tar cf - --exclude='pipeline-output' --exclude='.git' . ) \
+    | ( cd "${TARGET}" && tar xf - --keep-old-files 2>/dev/null || tar xkf - 2>/dev/null || true )
   # 清理 demo change（用户会起自己的）
   find "${TARGET}" -type d -name 'add-demo-feature' -exec rm -rf {} + 2>/dev/null || true
+}
+
+# 安全文件复制：仅当目标不存在时才 cp
+safe_cp() {
+  local s="$1" d="$2"
+  if [[ -e "$d" ]]; then
+    log "$(basename "$d") 已存在，保留不覆盖"
+  else
+    cp -R "$s" "$d"
+  fi
 }
 
 case "${STACK}" in
@@ -160,25 +206,29 @@ case "${STACK}" in
     prepare_bare
     src="${PL_HOME}/examples/demo-monorepo-trio/frontend"
     [[ -d "$src" ]] || die "找不到 nextjs 模板: $src"
-    cp -R "$src/app" "$src/package.json" "${TARGET}/"
-    cp "$src/.pl-adapter.yaml" "${TARGET}/" 2>/dev/null || true
+    safe_cp "$src/app" "${TARGET}/app"
+    safe_cp "$src/package.json" "${TARGET}/package.json"
+    safe_cp "$src/.pl-adapter.yaml" "${TARGET}/.pl-adapter.yaml"
     ;;
   fastapi)
     log "复制 fastapi 骨架（基于 demo-monorepo-trio/api）"
     prepare_bare
     src="${PL_HOME}/examples/demo-monorepo-trio/api"
     [[ -d "$src" ]] || die "找不到 fastapi 模板: $src"
-    cp -R "$src/app" "$src/pyproject.toml" "${TARGET}/"
-    cp "$src/.pl-adapter.yaml" "${TARGET}/" 2>/dev/null || true
+    safe_cp "$src/app" "${TARGET}/app"
+    safe_cp "$src/pyproject.toml" "${TARGET}/pyproject.toml"
+    safe_cp "$src/.pl-adapter.yaml" "${TARGET}/.pl-adapter.yaml"
     ;;
   crawler)
     log "复制 crawler 骨架（基于 demo-monorepo-trio/crawler，无 adapter）"
     prepare_bare
     src="${PL_HOME}/examples/demo-monorepo-trio/crawler"
     [[ -d "$src" ]] || die "找不到 crawler 模板: $src"
-    cp -R "$src/spiders" "$src/tests" "$src/pyproject.toml" "${TARGET}/"
+    safe_cp "$src/spiders" "${TARGET}/spiders"
+    safe_cp "$src/tests" "${TARGET}/tests"
+    safe_cp "$src/pyproject.toml" "${TARGET}/pyproject.toml"
     mkdir -p "${TARGET}/pl/adapters"
-    cp "$src/pl/adapters/build.yaml" "${TARGET}/pl/adapters/" 2>/dev/null || true
+    safe_cp "$src/pl/adapters/build.yaml" "${TARGET}/pl/adapters/build.yaml"
     ;;
   monorepo-trio)
     prepare_from_example "demo-monorepo-trio"

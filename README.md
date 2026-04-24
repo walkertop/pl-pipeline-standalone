@@ -3,7 +3,7 @@
 > **让 AI 编码不再是 "vibe coding"，而是可审计、可恢复、可验证的工程过程。**
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v1.9.0-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-v1.9.1-blue">
   <img alt="stage" src="https://img.shields.io/badge/stage-stable-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="retro" src="https://img.shields.io/badge/retro--v2-4%2F4%20closed-success">
@@ -98,6 +98,36 @@ pl status                              # 看所有 change
 pl run --change add-first-feature --gate D --json    # 跑机器门禁
 pl smoke --change add-first-feature --json           # 冷启动 + HTTP probe
 pl dashboard --open                    # SSE 实时面板
+```
+
+### 已有项目怎么接入？
+
+如果你的项目已经有代码 + git，用 `--here`（v1.9.1+ 安全：已有文件不覆盖）：
+
+```bash
+cd /your/existing/project
+pl new whatever --here --stack bare        # 只 inject pl 骨架，零侵入
+pl new whatever --here --stack nextjs      # 同时装 nextjs adapter
+```
+
+`--here` 会智能识别：
+- 已有 `.gitignore` → 把 pl 规则 append 到末尾（保留你的规则）
+- 已有 `.git` → 不重新 init
+- 已有 `README.md` / `package.json` / 任何源代码 → **保留不覆盖**
+- 只装 `pl/config.yaml`、`pl/changes/`、可选 adapter 资产到 `.codebuddy/`
+
+### 多版本并存（进阶）
+
+默认 `~/.pl-pipeline` 全局一份就够。如需"项目锁版本"（项目 A 用 v1.7、项目 B 用 v1.9）：
+
+```bash
+# 装多版本到不同目录
+PL_INSTALL_PREFIX=~/.pl-pipeline-v1.7 PL_INSTALL_REF=pl-v1.7.3 PL_INSTALL_NO_RC=1 \
+  bash <(curl -fsSL https://raw.githubusercontent.com/walkertop/pl-pipeline-standalone/main/install.sh)
+
+# 用 direnv 在不同项目自动切（推荐）
+echo 'export PL_HOME=~/.pl-pipeline-v1.7' > /path/to/old-project/.envrc
+direnv allow
 ```
 
 > **多模块项目？** 用 `--stack monorepo-trio`，详细见 [`docs/guides/monorepo-quickstart.md`](./docs/guides/monorepo-quickstart.md)。

@@ -61,6 +61,69 @@
 >
 > 🚀 **2026-04-24 v1.9.0 · zero-friction 上手**：把"装工具 + 起项目"从 8 步压成 2 条命令——
 > `curl ... | bash` 装 + `pl new <name> --stack <stack>` 起。彻底解决"部署太麻烦"。
+>
+> 🔧 **2026-04-24 v1.9.1 · curl|bash + 已有项目接入加固**：修 `BASH_SOURCE[0] unbound`
+> stdin 场景；`pl new --here` 现在 100% 不覆盖你已有的代码 / .gitignore / README / .git；
+> README 加"已有项目接入"+"多版本并存（direnv）"段。
+
+---
+
+## [1.9.1] — 2026-04-24 · curl|bash 兼容 + `pl new --here` 安全化 🔧
+
+### 背景
+
+用户实测 `curl -fsSL .../install.sh | bash` 时报 `BASH_SOURCE[0]: unbound variable`
+（虽然安装实际成功），同时疑问"已有 git 项目怎么接入"和"装到根目录会不会冲突"。
+本版修第一个 bug，加固第二个流程，文档化第三个心智模型。
+
+### 修复
+
+**1. install.sh 在 `curl|bash` (stdin) 场景下的 unbound variable**
+
+   `BASH_SOURCE[0]` 在脚本来自 stdin 时不存在，被 `set -u` 捕获。
+   修复方式：用 `${BASH_SOURCE[0]:-}` 防御 + 仅当 SELF_DIR 存在时才检测 LOCAL_MODE。
+   同时 `RC_FILE` 在 `PL_INSTALL_NO_RC=1` 时未定义的引用也修了。
+
+**2. `pl new --here` 在已有项目上的破坏性覆盖**
+
+   修复前：`cat > .gitignore` 直接覆盖；`tar xf -` 直接解包覆盖；`cp` 不检查目标存在性。
+   用户已有 `.gitignore` / `README.md` / `package.json` 都会被静默吞掉。
+
+   修复后引入三道安全闸：
+   - `ensure_gitignore()`：已有 `.gitignore` → append 缺失的 pl 规则（带 `# >>> pl-pipeline >>>` marker）；
+     不重写、不去重你的规则
+   - `safe_cp()`：目标已存在 → 跳过 + log "保留不覆盖"
+   - `prepare_from_example()`：tar 改用 `--keep-old-files` (GNU) / `-k` (BSD) 兼容方式
+   - `--here` + 已有 `.git` → 自动 `NO_GIT=true`，绝不重 init
+   - `--here` + 非 bare stack → 主动 warn 提示用户用 `--stack bare` 减少副作用
+
+### 新增
+
+**README "已有项目接入" 段**
+
+```bash
+cd /your/existing/project
+pl new whatever --here --stack bare        # 零侵入装 pl 接入层
+pl new whatever --here --stack nextjs      # + 装 nextjs adapter
+```
+
+**README "多版本并存" 段**
+
+讲清楚 `PL_HOME` 是工具家、`PL_PROJECT` 是项目家的心智模型。
+默认 `~/.pl-pipeline` 一份就够；如需项目锁版本，用 `PL_INSTALL_PREFIX` + direnv。
+
+**测试新增 7 个 case**
+
+`tests/cli/test-pl-new.sh` 从 38 → 45：
+- Suite 5: --here 不覆盖已有 .gitignore / README.md / src/ / .git
+- Suite 5: --here --stack nextjs 不覆盖已有 package.json (safe_cp)
+- Suite 6: install.sh 通过 stdin 跑不应有 unbound variable
+
+### 影响
+
+- **零 breaking** — 所有原有用法行为不变
+- **`pl new --here` 现在可放心地用在你任何已有 git 项目上**
+- **CI 11 个 job 仍 100% 绿**（pl-new-smoke 从 38 → 45 case）
 
 ---
 
