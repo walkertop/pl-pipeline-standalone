@@ -174,6 +174,82 @@ else
 fi
 
 # ----------------------------------------------------------------------
+# Suite 6: pl upgrade / pl doctor 远端检查 (v1.10.1)
+# ----------------------------------------------------------------------
+tc_suite "upgrade-and-doctor-version-check"
+
+tc_case "pl upgrade --help 输出 usage"
+tc_assert_contains "pl upgrade" "pl upgrade --help" "$PL" upgrade --help
+
+tc_case "pl upgrade --check 在 PL_HOME 已是最新时 exit 0"
+# 假设 dev 环境的 PL_HOME (REPO_ROOT) 就是最新 main，--check 应该 exit 0 或 10
+# 这里只验证退出码不是 1/2（即不是错误，而是 0/10）
+set +e
+"$PL" upgrade --check >/dev/null 2>&1
+rc=$?
+set -e
+TC_CURRENT_CASE="pl upgrade --check exit in {0,10}"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ $rc -eq 0 || $rc -eq 10 ]]; then tc_ok; else tc_fail "expected 0 or 10, got $rc"; fi
+
+tc_case "pl upgrade --check --no-fetch 不应触发网络 / unbound"
+set +e
+out=$("$PL" upgrade --check --no-fetch 2>&1)
+rc=$?
+set -e
+TC_CURRENT_CASE="pl upgrade --check --no-fetch healthy"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ "$out" == *"unbound variable"* ]]; then
+  tc_fail "unbound variable in output: $out"
+elif [[ $rc -eq 0 || $rc -eq 10 ]]; then
+  tc_ok
+else
+  tc_fail "expected 0 or 10, got $rc; out: $out"
+fi
+
+tc_case "pl upgrade 在非 git PL_HOME 时友好报错（exit 1）"
+FAKE=$(mktemp -d)
+mkdir -p "$FAKE/scripts" "$FAKE/bin"
+cp "$REPO_ROOT/scripts/_env.sh" "$FAKE/scripts/"
+cp "$REPO_ROOT/scripts/pl-upgrade.sh" "$FAKE/scripts/"
+echo "0.0.0" > "$FAKE/VERSION"
+set +e
+out=$(PL_HOME="$FAKE" bash "$FAKE/scripts/pl-upgrade.sh" --check 2>&1)
+rc=$?
+set -e
+rm -rf "$FAKE"
+TC_CURRENT_CASE="pl upgrade non-git → exit 1 + 友好提示"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ $rc -eq 1 && "$out" == *"非 git"* || "$out" == *"不是 git"* ]]; then
+  tc_ok
+else
+  tc_fail "expected exit 1 + '非 git'/'不是 git'; got rc=$rc, out=$out"
+fi
+
+tc_case "pl doctor PL_DOCTOR_OFFLINE=1 应跳过远端检查"
+set +e
+out=$(PL_DOCTOR_OFFLINE=1 "$PL" doctor 2>&1)
+rc=$?
+set -e
+TC_CURRENT_CASE="pl doctor offline mode skips remote"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ "$out" == *"PL_DOCTOR_OFFLINE"* || "$out" == *"已跳过"* ]]; then
+  tc_ok
+else
+  tc_fail "expected '已跳过' / PL_DOCTOR_OFFLINE in output; got: $out"
+fi
+
+tc_case "pl doctor 包含 [版本] 段落"
+out=$(PL_DOCTOR_OFFLINE=1 "$PL" doctor 2>&1)
+TC_CURRENT_CASE="pl doctor has [版本] section"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ "$out" == *"[版本]"* && "$out" == *"pl-pipeline ="* ]]; then
+  tc_ok
+else
+  tc_fail "missing [版本]/pl-pipeline = section"
+fi
+
+# ----------------------------------------------------------------------
 # Final summary
 # ----------------------------------------------------------------------
 tc_summary

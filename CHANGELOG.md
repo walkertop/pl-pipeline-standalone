@@ -7,6 +7,69 @@
 
 ---
 
+## [pl-v1.10.1] - 2026-04-24
+
+### 新增
+
+#### `pl upgrade` —— pl-pipeline 自身的版本升级命令
+
+之前升级 pl-pipeline 只能：(a) 重跑 `install.sh`、(b) `cd $PL_HOME && git pull` 手动操作。
+v1.10.1 起 pl 自己就能升：
+
+```bash
+pl upgrade                       # 升到最新 stable tag (pl-v*, 过滤 pre-release)
+pl upgrade --check               # 只检查不升级
+                                 #   exit 0  = 已是最新
+                                 #   exit 10 = 有新版本可升
+                                 #   exit 1  = 检查失败
+pl upgrade --ref pl-v1.10.0      # 锁到指定版本
+pl upgrade --ref main            # 切到主干（开发场景）
+pl upgrade --no-fetch            # 离线模式，用本地已 fetch 的 ref
+```
+
+**安全约束**（避免吞掉本地改动）：
+- PL_HOME 必须是 git 仓库（vendor 拷贝模式拒绝；submodule 模式提示走宿主仓 PR）
+- PL_HOME 有未提交修改时拒绝 checkout，提示 `git stash` 或 commit 后再升
+- 默认 `--depth` 不限制（可访问历史 tag）
+
+#### `pl doctor` 新增 [版本] 段落的远端过期检查
+
+`pl doctor` 现在会主动告诉你"是否过期"：
+
+```bash
+pl doctor
+# [版本]
+#   pl-pipeline = 1.10.0
+#   ✓ 已是最新 stable                    ← 或
+#   ↑ 有新版本: 1.10.1（运行 pl upgrade 升级；离线请设 PL_DOCTOR_OFFLINE=1）
+```
+
+**性能与隐私设计**：
+- 24 小时内只 fetch 一次（缓存到 `$PL_HOME/.git/.pl-doctor-fetched`，第二次跑 doctor < 50ms）
+- `PL_DOCTOR_OFFLINE=1` 完全跳过远端检查（适合 CI / 内网无外网）
+- `PL_DOCTOR_NO_FETCH=1` 用本地已 fetch 的 tag 比对，但不联网（混合模式）
+- 远端检查失败时静默降级（不让网络抖动把 doctor 报红）
+- 仅当 PL_HOME 是 git 仓库时启用（vendor 模式自动跳过并提示）
+
+### 改进
+
+- `bin/pl` 帮助文案更新：`upgrade` 列入元命令；`doctor` 描述加上"版本是否过期"
+- 测试套件 +6 case（`tests/cli/test-pl.sh` Suite 6）：upgrade --help / --check / --no-fetch / 非 git 报错 / doctor offline / doctor [版本] 段落
+
+### 设计权衡（写给后续维护者）
+
+为什么 doctor 远端检查默认启用、warn-only、不影响 rc？
+- 启用：用户痛点是"不知道自己过期" — 默认 silent 失去价值
+- warn-only：网络抖动不该让 `pl doctor && do_something` 这条链断
+- 24h 缓存：避免每次 `pl doctor` 都打 fetch，对 GitHub API 友好
+- 想要硬阻断（CI 强制最新）的用户可以自己 `pl upgrade --check`（exit 10 = 过期）
+
+为什么 `pl upgrade` 拒绝 vendor / submodule？
+- vendor：升级 = 替换文件，pl 无权代替你做这件事
+- submodule：升级会污染宿主仓 git history，必须走宿主仓的 PR / commit 流程
+
+---
+
 ## [pl-v1.10.0] - 2026-04-24
 
 ### 新增

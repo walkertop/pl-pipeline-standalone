@@ -125,7 +125,8 @@ ${C_BLD}工程辅助:${C_OFF}
 ${C_BLD}元命令:${C_OFF}
   ${C_GRN}version${C_OFF}, --version     打印版本与 PL_HOME
   ${C_GRN}env${C_OFF}                    打印所有 PL_* 环境变量
-  ${C_GRN}doctor${C_OFF}                 自检：python3 / yq / jq / 路径
+  ${C_GRN}doctor${C_OFF}                 自检：python3 / yq / jq / 路径 / 版本是否过期
+  ${C_GRN}upgrade${C_OFF} [--check]      升级 PL_HOME 到最新 stable tag（或 --ref 指定）
   ${C_GRN}help${C_OFF} [<sub>]           本帮助 / 透传 <sub> 的 --help
 
 ${C_DIM}所有 flag 透传给底层脚本。任意子命令均可加 -h / --help 查详细。
@@ -153,6 +154,7 @@ _pl_subcmd_to_script() {
     should-build)       echo "should-build.sh" ;;
     setup-hooks)        echo "setup-hooks.sh" ;;
     log-error)          echo "log-error.sh" ;;
+    upgrade)            echo "pl-upgrade.sh" ;;
     *)                  echo "" ;;
   esac
 }
@@ -185,11 +187,14 @@ _pl_doctor() {
 
   echo ""
   echo "${C_BLD}[版本]${C_OFF}"
+  local local_v="unknown"
   if [[ -f "$PL_HOME/VERSION" ]]; then
-    echo "  pl-pipeline = $(tr -d '[:space:]' < "$PL_HOME/VERSION")"
+    local_v=$(tr -d '[:space:]' < "$PL_HOME/VERSION")
+    echo "  pl-pipeline = $local_v"
   else
     echo "  pl-pipeline = ${C_YEL}VERSION 文件缺失${C_OFF}"
   fi
+  _pl_doctor_check_outdated "$local_v"
 
   echo ""
   if [[ $rc -eq 0 ]]; then
@@ -198,6 +203,67 @@ _pl_doctor() {
     echo "${C_RED}✗ doctor: 有关键项失败，见上${C_OFF}"
   fi
   return $rc
+}
+
+# 远端版本检查（warn-only，不影响 rc）
+# 行为：
+#   - 仅当 PL_HOME 是 git 仓库时启用
+#   - 24 小时内只 fetch 一次（缓存到 .git/.pl-doctor-fetched）
+#   - PL_DOCTOR_OFFLINE=1 完全跳过
+#   - PL_DOCTOR_NO_FETCH=1 用本地已 fetch 的 tag 比对，但不联网
+#   - 任何失败均静默（doctor 不该因为网络断了就喊"失败"）
+_pl_doctor_check_outdated() {
+  local local_v="$1"
+  [[ "$local_v" == "unknown" ]] && return 0
+  [[ -n "${PL_DOCTOR_OFFLINE:-}" ]] && {
+    printf "  ${C_DIM}远端检查：已跳过 (PL_DOCTOR_OFFLINE=1)${C_OFF}\n"
+    return 0
+  }
+  [[ -d "$PL_HOME/.git" ]] || {
+    printf "  ${C_DIM}远端检查：已跳过 (PL_HOME 非 git 仓库 / vendor 模式)${C_OFF}\n"
+    return 0
+  }
+
+  local fetch_marker="$PL_HOME/.git/.pl-doctor-fetched"
+  local need_fetch=true
+
+  if [[ -f "$fetch_marker" ]]; then
+    # 24 小时缓存（86400 秒）
+    local now mtime age
+    now=$(date +%s 2>/dev/null) || return 0
+    if mtime=$(stat -f %m "$fetch_marker" 2>/dev/null) || mtime=$(stat -c %Y "$fetch_marker" 2>/dev/null); then
+      age=$(( now - mtime ))
+      [[ $age -lt 86400 ]] && need_fetch=false
+    fi
+  fi
+
+  if [[ -z "${PL_DOCTOR_NO_FETCH:-}" ]] && $need_fetch; then
+    if ( cd "$PL_HOME" && git fetch --tags --quiet 2>/dev/null ); then
+      touch "$fetch_marker" 2>/dev/null || true
+    fi
+    # fetch 失败也继续 — 用本地已有 tag 比对
+  fi
+
+  local latest_tag latest_v
+  latest_tag=$(cd "$PL_HOME" && git tag --list 'pl-v*' --sort=-v:refname 2>/dev/null \
+    | grep -Ev -- '-(alpha|beta|rc|pre|dev)([.-]|$)' \
+    | head -1)
+  [[ -z "$latest_tag" ]] && return 0
+  latest_v="${latest_tag#pl-v}"
+
+  if [[ "$latest_v" == "$local_v" ]]; then
+    printf "  ${C_GRN}✓ 已是最新 stable${C_OFF}\n"
+    return 0
+  fi
+
+  # semver 比较，区分"过期"和"领先（开发版）"
+  local newest
+  newest=$(printf '%s\n%s\n' "$local_v" "$latest_v" | sort -V 2>/dev/null | tail -1)
+  if [[ "$newest" == "$local_v" ]]; then
+    printf "  ${C_BLU}ℹ 领先远端 stable %s（开发/未发布版本）${C_OFF}\n" "$latest_v"
+  else
+    printf "  ${C_YEL}↑ 有新版本: %s${C_OFF}（运行 ${C_BLD}pl upgrade${C_OFF} 升级；离线请设 PL_DOCTOR_OFFLINE=1）\n" "$latest_v"
+  fi
 }
 
 # ---- env --------------------------------------------------------------------
@@ -363,6 +429,7 @@ case "$cmd" in
   should-build)       _pl_exec should-build.sh         "$@" ;;
   setup-hooks)        _pl_exec setup-hooks.sh          "$@" ;;
   log-error)          _pl_exec log-error.sh            "$@" ;;
+  upgrade)            _pl_exec pl-upgrade.sh           "$@" ;;
 
   *)
     _pl_die "未知子命令: ${cmd}（用 'pl help' 看清单）"
