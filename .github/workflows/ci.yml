@@ -380,3 +380,16 @@ jobs:
       - name: Run CDC real scenario tests
         run: bash tests/cli/test-cdc-real.sh
 
+  # -----------------------------------------------------------------
+  # Job 9：pl new + install.sh 端到端（v1.9.0+）
+  # 守 zero-friction 上手：5 个 stack × monorepo 三模块 × adapter 真装
+  # -----------------------------------------------------------------
+  pl-new-smoke:
+    name: pl new + install.sh smoke
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pl new tests (5 stacks + options)
+        run: bash tests/cli/test-pl-new.sh
+

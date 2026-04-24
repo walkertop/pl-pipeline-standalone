@@ -77,6 +77,7 @@ ${C_BLD}用法:${C_OFF}
   pl --version | --help
 
 ${C_BLD}核心命令:${C_OFF}
+  ${C_GRN}new${C_OFF}              一键起新项目（pl new <name> --stack nextjs|fastapi|crawler|monorepo-trio|bare）
   ${C_GRN}init${C_OFF}             创建 change 骨架（.state.md + workflow.start 事件）
   ${C_GRN}status${C_OFF}           查看 pipeline 状态（人读表 / --json / --self-check）
   ${C_GRN}run${C_OFF}              执行 gate / check（统一执行器）
@@ -134,6 +135,7 @@ EOF
 # 把 subcmd 翻译成对应脚本名，让 `pl help <sub>` 透传 --help
 _pl_subcmd_to_script() {
   case "$1" in
+    new)                echo "pl-new-project.sh" ;;
     init)               echo "pl-state-init.sh" ;;
     status)             echo "pl-status.sh" ;;
     run)                echo "pl-runner.sh" ;;
@@ -344,6 +346,7 @@ case "$cmd" in
     ;;
 
   # ---- 顶层 1:1 映射 ------------------------------------------------------
+  new)                _pl_exec pl-new-project.sh       "$@" ;;
   init)               _pl_exec pl-state-init.sh        "$@" ;;
   status)             _pl_exec pl-status.sh            "$@" ;;
   run)                _pl_exec pl-runner.sh            "$@" ;;

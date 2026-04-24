@@ -58,6 +58,105 @@
 > 🏗️ **2026-04-24 v1.8.4 · monorepo 接入指南 + demo-trio**：把"前端 + Python 服务端 + 爬虫"
 > 三模块从 0 到 1 接入 pl-pipeline 的完整心智模型 / 步骤 / 可跑骨架沉淀成文档与示例，
 > 关键澄清"无 adapter 的模块（爬虫/Go/Rust）也能裸跑 pl-core"。
+>
+> 🚀 **2026-04-24 v1.9.0 · zero-friction 上手**：把"装工具 + 起项目"从 8 步压成 2 条命令——
+> `curl ... | bash` 装 + `pl new <name> --stack <stack>` 起。彻底解决"部署太麻烦"。
+
+---
+
+## [1.9.0] — 2026-04-24 · zero-friction 上手：install.sh + `pl new` 🚀
+
+### 背景
+
+用户反馈："这样部署太麻烦了，难道没有 npm install 或者脚本？"
+
+之前接入 pl-pipeline 要 8 步：
+```
+git clone + git checkout + export PL_HOME + export PATH + 改 shell rc +
+mkdir pl/changes + cp config + adapter install + git init + pl init
+```
+
+跟"30 秒上手"的承诺脱节。本版彻底解决：**装工具 1 条命令 + 起项目 1 条命令**。
+
+### 新增
+
+**1. `install.sh`（一键安装器）**
+
+   - 支持 `curl | bash` 和 `wget | bash` 两种姿势
+   - 也支持本地 `git clone + bash install.sh`
+   - 自动检测依赖（bash / python3 / git / jq）
+   - 自动 clone 到 `~/.pl-pipeline`（可由 `PL_INSTALL_PREFIX` 覆盖）
+   - 切到最新 stable tag (`pl-v*`)
+   - 幂等写入 shell rc：zsh / bash / fish / sh 都支持
+   - 多次执行自动 git pull 升级
+   - 选项：`PL_INSTALL_NO_RC` / `PL_INSTALL_FORCE` / `PL_INSTALL_QUIET` / `PL_INSTALL_REF`
+   - LOCAL_MODE：从仓库内执行时自动识别，不重复 clone
+
+**2. `pl new <name> --stack <stack>`（项目初始化器）**
+
+   一条命令完成原本 6 步：mkdir + cp config + 装 adapter + git init + pl init + 写 README/.gitignore
+
+   5 个 stack 开箱可用：
+   - `bare` — 任意栈，仅 pl-core 骨架（无 adapter）
+   - `nextjs` — 单 Next.js + adapter-nextjs-web 完整资产
+   - `fastapi` — 单 FastAPI + adapter-python-fastapi 完整资产
+   - `crawler` — 爬虫，无 adapter，自定义 `pl/adapters/build.yaml`
+   - `monorepo-trio` — 前端 + 服务端 + 爬虫一次到位（基于 demo-monorepo-trio）
+
+   选项：`--here` / `--no-git` / `--no-init` / `--first-change <id>` / `--force`
+
+**3. CI 新 job：`pl-new-smoke`**
+
+   `tests/cli/test-pl-new.sh` 38 个测试覆盖：
+   - install.sh 语法 + LOCAL_MODE 检测
+   - 5 个 stack × 真起项目 × 各 5-6 项断言（adapter 装上 / change 起来 / build.yaml 在位）
+   - `--no-git` / `--no-init` / `--first-change` / `--force` 行为正确
+   - 已存在目录无 `--force` 应拒绝
+
+### 体验对比
+
+**Before (v1.8.x)**：
+```bash
+git clone https://github.com/walkertop/pl-pipeline-standalone
+cd pl-pipeline-standalone
+git checkout pl-v1.8.4
+export PL_HOME="$PWD"
+export PATH="$PL_HOME/bin:$PATH"
+echo 'export PL_HOME=...' >> ~/.zshrc
+echo 'export PATH=...' >> ~/.zshrc
+cd /path/to/your-project
+mkdir -p pl/changes
+cp $PL_HOME/assets/pl/config.default.yaml pl/config.yaml
+export PL_PROJECT="$PWD"
+pl adapter install $PL_HOME/adapters/adapter-nextjs-web .
+git init
+pl init add-user-login --name "添加用户登录" --domain auth
+```
+
+**After (v1.9.0)**：
+```bash
+curl -fsSL https://raw.githubusercontent.com/walkertop/pl-pipeline-standalone/main/install.sh | bash
+source ~/.zshrc
+pl new my-app --stack nextjs
+```
+
+**8 步 → 2 步，零 export，零 cp，零改 shell rc**。
+
+### 修复
+
+- `pl new` 处理绝对路径名（如 `pl new /tmp/foo` 之前会拼成 `$PWD/tmp/foo`）
+- `pl-new-project.sh` 中所有 `$VAR` 紧贴中文的位置改用 `${VAR}`，避免 bash 3.2 `set -u` unbound 误判（macOS 默认 bash 3.2.57 的老问题）
+
+### 影响
+
+- **零 breaking** — 老的"手动 cp config + adapter install"流程 100% 仍可用
+- **零新依赖** — install.sh 只用 bash/git/python3/jq，pl new 只用 bash + 已有脚本
+- **README "30 秒上手" 完全重写**，从 8 步代码块缩成 3 个清晰子步骤
+- **monorepo-quickstart.md** 同步更新，`pl new --stack monorepo-trio` 取代手工 mkdir 路径
+
+### 升级路径
+
+无 breaking。直接拉 `pl-v1.9.0` 或重新跑 install.sh 自动升级。
 
 ---
 

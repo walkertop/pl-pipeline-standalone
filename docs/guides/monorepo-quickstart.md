@@ -76,26 +76,39 @@ my-saas/                          ← git repo 根
 
 ---
 
-## 2. 一次性准备（5 分钟）
+## 2. 一次性准备（30 秒）
 
 ### 2.1 安装 pl-pipeline 工具
 
 ```bash
-cd ~/repos
-git clone https://github.com/walkertop/pl-pipeline-standalone.git
-cd pl-pipeline-standalone
-git checkout pl-v1.8.4    # 或最新 stable tag
-
-export PL_HOME="$PWD"
-export PATH="$PL_HOME/bin:$PATH"
+curl -fsSL https://raw.githubusercontent.com/walkertop/pl-pipeline-standalone/main/install.sh | bash
+source ~/.zshrc           # 或 ~/.bashrc
 
 pl --version              # 验证 CLI 可用
 pl doctor                 # 检查 python3 / jq / 依赖
 ```
 
-> 推荐写进 `~/.zshrc` / `~/.bashrc`，全局可用。
+> 安装到 `~/.pl-pipeline`，自动写 shell rc。详见 README "30 秒上手"。
 
-### 2.2 起 monorepo 仓库骨架
+### 2.2 一条命令起 monorepo 骨架（推荐）
+
+```bash
+cd ~/repos
+pl new my-saas --stack monorepo-trio
+```
+
+完成后你会得到（已 `git init`、各子模块 adapter 已装、各起首个 change）：
+
+```
+my-saas/
+├── frontend/    Next.js + adapter-nextjs-web 全套 + add-first-feature change
+├── api/         FastAPI + adapter-python-fastapi 全套 + add-first-feature change
+└── crawler/     Scrapy 风格 + 自定义 build.yaml + add-first-feature change
+```
+
+### 2.2 (alt) 手工法（理解每一步在做什么）
+
+如果你想理解"每一步是什么"，用手工法：
 
 ```bash
 mkdir -p ~/repos/my-saas/{frontend,api,crawler}
@@ -107,6 +120,8 @@ echo "# my-saas" > README.md
 mkdir -p frontend/app api/app crawler/spiders
 touch frontend/package.json api/pyproject.toml crawler/pyproject.toml
 ```
+
+后续 §3 描述的内容是手工法的详细步骤；用 `pl new --stack monorepo-trio` 已经全部自动化。
 
 ---
 
