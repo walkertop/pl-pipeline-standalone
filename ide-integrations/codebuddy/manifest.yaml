@@ -1,0 +1,61 @@
+# =============================================================================
+# CodeBuddy IDE 集成 manifest（pl-pipeline v1.11.0+）
+# =============================================================================
+#
+# CodeBuddy 是 pl-pipeline 最早原生支持的 IDE（v1.0 时期）。
+# 跟 Cursor 相比, CodeBuddy 是"copy-based"风格 — agent/skill/rule 都需要在
+# .codebuddy/ 下有物理副本才能被识别。
+#
+# 关键特性:
+#   - Commands: .codebuddy/commands/<ns>/<name>.md, 需要 YAML frontmatter
+#               (name / description / argument-hint)
+#   - Rules: .codebuddy/rules/<name>.md, plain markdown
+#   - Agents: .codebuddy/agents/<name>.md, plain markdown, 必须存在于此才被识别
+#   - Skills: .codebuddy/skills/<name>.md
+# =============================================================================
+ide_id: codebuddy
+display_name: CodeBuddy
+
+detect:
+  any_of:
+    - .codebuddy
+
+sync:
+  commands:
+    enabled: true
+    source: ide-integrations/codebuddy/commands/pl    # 自己, 因为 codebuddy 是模板源
+    target: .codebuddy/commands/pl
+    target_ext: .md
+    name_prefix: ""
+    strip_frontmatter: false                          # codebuddy 需要保留 frontmatter
+
+  rules:
+    enabled: true
+    source_chain:
+      - "{PL_PROJECT}/pl/rules"
+      - "{PL_PROJECT}/pl/.adapter/rules"
+      - "{PL_HOME}/assets/pl/rules"
+    target: .codebuddy/rules
+    target_ext: .md
+    name_prefix: pl-
+    add_frontmatter: ""                               # codebuddy rules 不需要 frontmatter
+
+  agents:
+    enabled: true                                     # ⚠️ codebuddy 必须有副本才能识别
+    source_chain:
+      - "{PL_PROJECT}/pl/agents"
+      - "{PL_PROJECT}/pl/.adapter/agents"
+      - "{PL_HOME}/assets/pl/agents"
+    target: .codebuddy/agents
+    target_ext: .md
+    name_prefix: pl-
+    add_frontmatter: ""
+
+  skills:
+    enabled: false                                    # skills 默认不传, 跟 cursor 一致
+    note: "如确需复制, 改 enabled: true 并配 source_chain/target"
+
+root_agents_md:
+  enabled: true
+  marker_begin: "<!-- >>> pl-pipeline:codebuddy managed section >>> -->"
+  marker_end: "<!-- <<< pl-pipeline:codebuddy managed section <<< -->"

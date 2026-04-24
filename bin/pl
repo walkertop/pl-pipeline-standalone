@@ -122,6 +122,12 @@ ${C_BLD}工程辅助:${C_OFF}
   ${C_GRN}log-error${C_OFF}             快速记录错误条目
   ${C_GRN}dashboard refresh${C_OFF}     仅刷新 dashboard 数据，不起 server
 
+${C_BLD}IDE 集成:${C_OFF}
+  ${C_GRN}ide detect${C_OFF}              扫描项目, 列出已检测到的 AI IDE
+  ${C_GRN}ide sync${C_OFF}                把 pl/{rules,agents,...} fan-out 到 IDE 目录
+  ${C_GRN}ide unsync${C_OFF}              撤回 sync 写过的文件
+  ${C_GRN}ide list${C_OFF}                列出 pl 当前管理的所有 IDE 文件
+
 ${C_BLD}元命令:${C_OFF}
   ${C_GRN}version${C_OFF}, --version     打印版本与 PL_HOME
   ${C_GRN}env${C_OFF}                    打印所有 PL_* 环境变量
@@ -155,6 +161,7 @@ _pl_subcmd_to_script() {
     setup-hooks)        echo "setup-hooks.sh" ;;
     log-error)          echo "log-error.sh" ;;
     upgrade)            echo "pl-upgrade.sh" ;;
+    ide)                echo "pl-ide.sh" ;;
     *)                  echo "" ;;
   esac
 }
@@ -291,7 +298,7 @@ case "$cmd" in
     sub="$1"; shift || true
     # help <sub> [<verb>]：翻译后透传 -h
     case "$sub" in
-      contract|trace|adapter|piao|dashboard|observe)
+      contract|trace|adapter|piao|dashboard|observe|ide)
         if [[ $# -eq 0 ]]; then
           echo "用法: pl $sub <verb> [args...]"
           echo "用 'pl help' 看可用 verb。"
@@ -317,6 +324,8 @@ case "$cmd" in
           piao:kernel-wordcheck)  _pl_exec piao-kernel-wordcheck.sh --help ;;
           dashboard:refresh)      _pl_exec pl-dashboard-refresh.sh --help ;;
           observe:check)          _pl_exec pl-observe-check.sh --help ;;
+          ide:detect|ide:sync|ide:unsync|ide:list|ide:help)
+                                  _pl_exec pl-ide.sh "$verb" --help ;;
           *) _pl_die "未知子命令: pl ${sub} ${verb}（用 'pl help' 看清单）" ;;
         esac
         ;;
@@ -411,6 +420,11 @@ case "$cmd" in
     else
       _pl_exec pl-observe.sh "$@"
     fi
+    ;;
+
+  # ---- 命名空间：ide ------------------------------------------------------
+  ide)
+    _pl_exec pl-ide.sh "$@"
     ;;
 
   # ---- 顶层 1:1 映射 ------------------------------------------------------

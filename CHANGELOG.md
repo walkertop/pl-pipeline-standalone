@@ -7,6 +7,101 @@
 
 ---
 
+## [pl-v1.11.0] - 2026-04-24
+
+### 新增
+
+#### `pl ide` —— 多 IDE 资产同步（OpenSpec 风格）
+
+把 `pl/{rules,agents,skills,commands}` 作为单一可信源，一条命令同步到各 AI IDE 约定目录。
+解决了之前 v1.0 ~ v1.10 期间 `.codebuddy/` 硬编码、对其它 IDE 不友好的痼疾。
+
+```bash
+pl ide detect                          # 扫描项目, 列出已检测到的 IDE
+pl ide list                            # 列出所有 pl 当前管理的 IDE 文件
+pl ide sync   [--ide <id>] [--all]     # pl/ → IDE 目录 fan-out
+pl ide unsync [--ide <id>] [--all]     # 撤回 pl 写过的文件
+```
+
+**IDE 差异化矩阵（v1.11.0 首发支持 Cursor + CodeBuddy）**：
+
+|          | Cursor                              | CodeBuddy                       |
+| -------- | ----------------------------------- | ------------------------------- |
+| 检测     | `.cursor/` 或 `.cursorrules` 存在   | `.codebuddy/` 存在              |
+| rules    | `.cursor/rules/pl-*.mdc` + frontmatter | `.codebuddy/rules/pl-*.md` plain |
+| commands | `.cursor/commands/pl/*.md` 无 frontmatter | `.codebuddy/commands/pl/*.md` 带 frontmatter |
+| agents   | 不复制（用 `@-mention` 引用 `pl/agents/*.md`） | `.codebuddy/agents/pl-*.md` 复制 |
+| skills   | 不复制（同上）                       | 不复制                           |
+| AGENTS.md | 写一段 `pl-pipeline:cursor managed section` | 写一段 `pl-pipeline:codebuddy managed section` |
+
+差异由 `ide-integrations/<id>/manifest.yaml` 声明式描述, 不在脚本里 hardcode。
+新增 IDE（如 Claude Code、Codex）只需加一份 manifest 即可, 无需改 Python 代码。
+
+**冲突保护机制**：
+
+1. **命名隔离**：所有 sync 出去的文件加 `pl-` 前缀（commands 在 `pl/` 子目录已隔离故不加），
+   不会和用户已有 rules / agents 撞名。
+2. **Hash 标记**：每个 sync 写入的文件首行（或 frontmatter 之后）插入：
+   ```
+   <!-- pl-managed: hash=<12位> source=<相对路径> ide=<id> -->
+   ```
+   重新 sync 时若 `sha256(剔除标记后的内容)[:12] != hash` → 检测为用户手改, 默认拒绝覆盖；
+   `--force` 强制覆盖。
+3. **分段 marker**：根 `AGENTS.md` 用 per-IDE marker 隔离, 同步多个 IDE 互不干扰。
+4. **三层资产栈**：rules/agents 的 source 按 `pl/<type>/` → `pl/.adapter/<type>/` → `$PL_HOME/assets/pl/<type>/` 顺序查找, 项目级始终覆盖 adapter / pl 自带, 跟既有覆盖契约一致。
+
+**幂等 + 可逆**：
+
+- 多次跑 `pl ide sync` 行为一致（已在文件且 hash 匹配 → 跳过）
+- `pl ide unsync` 恢复到 sync 前的状态（hash 校验过的才删, 用户手改自动保留, `--force` 强删）
+- AGENTS.md 段落 sync 时写入, unsync 时干净剔除
+
+#### `ide-integrations/cursor/` 首发支持
+
+- Cursor 2026 约定：`.cursor/commands/*.md`（plain markdown）+ `.cursor/rules/*.mdc`（带 YAML frontmatter, `alwaysApply: true`）
+- 复用 `ide-integrations/codebuddy/commands/pl/*.md` 作单源, sync 时按 manifest 自动剥除 frontmatter
+
+### 改进
+
+- `bin/pl` 帮助文案新增 "IDE 集成" 段落, 并把 `ide` 加入 namespace 路由
+- `tests/cli/test-pl.sh` +7 case（Suite 7 `ide-sync`）：
+  detect / sync 实际写入 / 文件格式正确（`.mdc` vs `.md`）/ AGENTS.md 段落正确 / hash 保护 / unsync 可逆
+
+### 设计权衡（写给后续维护者）
+
+- **为什么用 manifest.yaml 而不是硬编码**：
+  支持新 IDE 的成本 = 加一个目录 + 一份 yaml, 不动 Python 代码。这跟 `adapters/` 的契约设计一致 —— 数据驱动, 行为收敛。
+
+- **为什么 Cursor 的 agents/skills 不复制**：
+  Cursor 没有"agents 目录约定", 用户用 `@pl/agents/foo.md` 直接引用即可。复制只会污染 `.cursor/`。
+  CodeBuddy 不一样 —— 它强制要求 `.codebuddy/agents/*.md` 物理存在才能识别, 故复制。
+
+- **为什么用 `pl-` 前缀**：
+  用户的 rules / agents 跟 pl 的不在一个命名空间。前缀让用户一眼看出"哪些是 pl 维护的"。
+  对应 `pl ide unsync` 时, hash 标记 + 前缀双保险, 不会误删用户文件。
+
+- **为什么不同 IDE 用独立 marker 段**：
+  早期实现用统一 marker 导致后 sync 的 IDE 把前一个段冲掉。改成 `pl-pipeline:<ide_id> managed section`
+  后, 多 IDE 段独立存在；用户也容易一眼看出"cursor 的同步包括啥"。
+
+- **为什么 sync 后用扫描而不是用本次新写文件做 AGENTS.md 列表**：
+  幂等运行（无新写）若用"本次新写"列表, AGENTS.md 列表会变空。改成扫描"目标目录里所有打了 pl-managed 标记且 ide=<id> 的文件"后, 任何时候 sync 都能把 AGENTS.md 维护成"当前实际状态"。
+
+### 兼容性
+
+- 完全向后兼容：未跑 `pl ide sync` 的项目行为不变
+- `adapter-install.sh` 暂未改, 仍写 `.codebuddy/`（v1.12 计划：先写到 `pl/agents` canonical, 再让 sync fan-out）
+- `pipeline-output/` 路径暂未变（v1.12 计划：统一到 `pl/.runtime/`, 配合 `pl/config.yaml requires.pl_version`）
+
+### 依赖
+
+- 新增 PyYAML 软依赖（与 `adapter-install.sh` / `pl-contract-verify.sh` 等已有脚本一致）。`pl ide sync` 启动时检测, 缺失给出明确安装指引：
+  ```
+  [pl-ide] 致命错误：缺少 PyYAML。请运行 `pip3 install --user pyyaml` 后重试。
+  ```
+
+---
+
 ## [pl-v1.10.1] - 2026-04-24
 
 ### 新增

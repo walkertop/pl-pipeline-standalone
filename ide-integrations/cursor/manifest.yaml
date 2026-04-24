@@ -1,0 +1,64 @@
+# =============================================================================
+# Cursor IDE 集成 manifest（pl-pipeline v1.11.0+）
+# =============================================================================
+#
+# 描述 Cursor 与其它 IDE 的差异点，由 pl-ide.sh 消费做差异化 sync。
+#
+# Cursor 的关键特性（截至 2026-04，参考 cursor-commands 社区惯例）:
+#   - Slash commands: .cursor/commands/<name>.md, plain markdown, NO frontmatter
+#   - Rules: .cursor/rules/<name>.mdc, .mdc 扩展名 + YAML frontmatter (alwaysApply / globs)
+#   - Agents: 不需要单独目录, 用 @-mention 引用项目内任意 .md 文件即可
+#   - Skills: 同 Agents, 用 @-mention 引用
+#
+# 跟其它 IDE 比, Cursor 偏向"reference-based"而非"copy-based"。
+# =============================================================================
+ide_id: cursor
+display_name: Cursor
+
+# pl ide detect 用：项目根存在以下任一就视为该 IDE 在用
+detect:
+  any_of:
+    - .cursor
+    - .cursorrules
+
+sync:
+  # ---- slash commands ----
+  commands:
+    enabled: true
+    source: ide-integrations/codebuddy/commands/pl    # 复用 codebuddy 模板做单源
+    target: .cursor/commands/pl
+    target_ext: .md
+    name_prefix: ""                                   # cursor 不需要 pl- 前缀（commands 在 pl/ 子目录已隔离）
+    strip_frontmatter: true                           # cursor 不识别 codebuddy 的 frontmatter
+
+  # ---- rules（硬约束，自动注入 system prompt）----
+  rules:
+    enabled: true
+    source_chain:                                     # 三层资产栈，前者优先
+      - "{PL_PROJECT}/pl/rules"                       # 项目层
+      - "{PL_PROJECT}/pl/.adapter/rules"              # adapter 层（adapter-install 注入位置）
+      - "{PL_HOME}/assets/pl/rules"                   # pl 自带
+    target: .cursor/rules
+    target_ext: .mdc                                  # ⚠️ Cursor 用 .mdc 不是 .md
+    name_prefix: pl-                                  # 跟用户已有 rule 命名空间隔离
+    add_frontmatter: |                                # Cursor rule 必须有 frontmatter
+      ---
+      description: "{name} (managed by pl-pipeline)"
+      alwaysApply: true
+      ---
+
+  # ---- agents（角色 prompt）----
+  agents:
+    enabled: false                                    # Cursor 用 @-mention 引用 pl/agents/*.md, 不需要复制
+    note: "在 pl/AGENTS.md 列出可用 agents, 用户用 @pl/agents/<name>.md 引用"
+
+  # ---- skills（被 agent/rule 间接调用的知识块）----
+  skills:
+    enabled: false                                    # 同 agents, 引用即可
+    note: "skills 永远只在 pl/skills/ 单源, 不复制"
+
+# ---- 根 AGENTS.md（Codex 约定的兜底 fallback, 但所有 AI IDE 都识别）----
+root_agents_md:
+  enabled: true
+  marker_begin: "<!-- >>> pl-pipeline:cursor managed section >>> -->"
+  marker_end: "<!-- <<< pl-pipeline:cursor managed section <<< -->"

@@ -250,6 +250,125 @@ else
 fi
 
 # ----------------------------------------------------------------------
+# Suite 7: pl ide (v1.11.0)
+# ----------------------------------------------------------------------
+tc_suite "ide-sync"
+
+tc_case "pl ide help 输出 usage"
+tc_assert_contains "ide detect" "pl ide help" "$PL" ide help
+
+tc_case "pl ide detect 在空目录返回 0"
+TMPDIR_IDE=$(mktemp -d)
+set +e
+out=$(cd "$TMPDIR_IDE" && "$PL" ide detect 2>&1)
+rc=$?
+set -e
+TC_CURRENT_CASE="pl ide detect in empty dir → exit 0"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ $rc -eq 0 && "$out" == *"未检测到"* ]]; then
+  tc_ok
+else
+  tc_fail "expected exit 0 + '未检测到'; rc=$rc out=$out"
+fi
+rm -rf "$TMPDIR_IDE"
+
+tc_case "pl ide detect 识别 .cursor 和 .codebuddy"
+TMPDIR_IDE=$(mktemp -d)
+mkdir -p "$TMPDIR_IDE/.cursor" "$TMPDIR_IDE/.codebuddy"
+set +e
+out=$(cd "$TMPDIR_IDE" && "$PL" ide detect 2>&1)
+rc=$?
+set -e
+TC_CURRENT_CASE="detect lists cursor + codebuddy"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ $rc -eq 0 && "$out" == *"cursor"* && "$out" == *"codebuddy"* ]]; then
+  tc_ok
+else
+  tc_fail "expected both ides; rc=$rc out=$out"
+fi
+rm -rf "$TMPDIR_IDE"
+
+tc_case "pl ide sync 实际写入并 idempotent"
+TMPDIR_IDE=$(mktemp -d)
+mkdir -p "$TMPDIR_IDE/.cursor" "$TMPDIR_IDE/.codebuddy"
+set +e
+(cd "$TMPDIR_IDE" && "$PL" ide sync >/dev/null 2>&1)
+rc1=$?
+written_cursor_rules=$(ls "$TMPDIR_IDE/.cursor/rules/" 2>/dev/null | wc -l | tr -d ' ')
+written_codebuddy_agents=$(ls "$TMPDIR_IDE/.codebuddy/agents/" 2>/dev/null | wc -l | tr -d ' ')
+# 第二次 sync 应不再写入（output 不含 written= 后跟非零数字 — 这里宽松判断只校验返回 0）
+(cd "$TMPDIR_IDE" && "$PL" ide sync >/dev/null 2>&1)
+rc2=$?
+set -e
+TC_CURRENT_CASE="ide sync writes files + idempotent"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ $rc1 -eq 0 && $rc2 -eq 0 && $written_cursor_rules -ge 1 && $written_codebuddy_agents -ge 1 ]]; then
+  tc_ok
+else
+  tc_fail "expected 2x rc 0 + cursor rules + codebuddy agents; got rc1=$rc1 rc2=$rc2 c-rules=$written_cursor_rules cb-agents=$written_codebuddy_agents"
+fi
+
+tc_case "Cursor rules 是 .mdc + frontmatter, CodeBuddy rules 是 .md plain"
+fst_cursor=$(ls "$TMPDIR_IDE/.cursor/rules/"*.mdc 2>/dev/null | head -1)
+fst_codebuddy=$(ls "$TMPDIR_IDE/.codebuddy/rules/"*.md 2>/dev/null | head -1)
+TC_CURRENT_CASE="cursor has .mdc with frontmatter, codebuddy plain .md"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ -f "$fst_cursor" ]] && head -1 "$fst_cursor" | grep -q '^---$' \
+   && [[ -f "$fst_codebuddy" ]]; then
+  tc_ok
+else
+  tc_fail "cursor=$fst_cursor codebuddy=$fst_codebuddy"
+fi
+
+tc_case "AGENTS.md 含两个独立 IDE 段落"
+TC_CURRENT_CASE="AGENTS.md has cursor+codebuddy managed sections"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if grep -q "pl-pipeline:cursor managed section" "$TMPDIR_IDE/AGENTS.md" \
+   && grep -q "pl-pipeline:codebuddy managed section" "$TMPDIR_IDE/AGENTS.md"; then
+  tc_ok
+else
+  tc_fail "missing one or both managed sections in $TMPDIR_IDE/AGENTS.md"
+fi
+
+tc_case "用户手改文件后 sync 默认拒绝覆盖"
+echo "USER MODIFIED" >> "$fst_cursor"
+set +e
+out=$(cd "$TMPDIR_IDE" && "$PL" ide sync --ide cursor 2>&1)
+set -e
+TC_CURRENT_CASE="hash mismatch → skip without --force"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ "$out" == *"被手工修改"* || "$out" == *"skipped=1"* ]]; then
+  tc_ok
+else
+  tc_fail "expected '被手工修改' or skipped=1, got: $out"
+fi
+
+tc_case "pl ide unsync 撤回 + AGENTS.md 段落消失"
+set +e
+(cd "$TMPDIR_IDE" && "$PL" ide unsync --force >/dev/null 2>&1)
+if [[ -d "$TMPDIR_IDE/.cursor/rules" ]]; then
+  remaining_cursor=$(find "$TMPDIR_IDE/.cursor/rules" -maxdepth 1 -type f | wc -l | tr -d ' ')
+else
+  remaining_cursor=0
+fi
+if [[ -d "$TMPDIR_IDE/.codebuddy/rules" ]]; then
+  remaining_cb=$(find "$TMPDIR_IDE/.codebuddy/rules" -maxdepth 1 -type f | wc -l | tr -d ' ')
+else
+  remaining_cb=0
+fi
+set -e
+TC_CURRENT_CASE="unsync removes managed files + AGENTS.md sections"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ $remaining_cursor -eq 0 && $remaining_cb -eq 0 ]] \
+   && ! grep -q "pl-pipeline:cursor managed section" "$TMPDIR_IDE/AGENTS.md" 2>/dev/null \
+   && ! grep -q "pl-pipeline:codebuddy managed section" "$TMPDIR_IDE/AGENTS.md" 2>/dev/null; then
+  tc_ok
+else
+  tc_fail "remaining cursor=$remaining_cursor cb=$remaining_cb; AGENTS.md grep showed leftover sections"
+fi
+rm -rf "$TMPDIR_IDE"
+
+# ----------------------------------------------------------------------
 # Final summary
 # ----------------------------------------------------------------------
 tc_summary
