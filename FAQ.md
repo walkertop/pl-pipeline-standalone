@@ -41,16 +41,24 @@
 
 ### Q: 怎么开始？
 
-见 [README §30秒上手](./README.md) 或 [`MVP_STATUS.md`](./MVP_STATUS.md)。
-
-三步：
+见 [README §30秒上手](./README.md)。最短路径：
 
 ```bash
-export PL_HOME=/path/to/pl-pipeline-standalone
-export PATH="$PL_HOME/bin:$PATH"     # 启用 pl CLI
-cd your-project
-pl adapter install $PL_HOME/adapters/adapter-nextjs-web .
+# 1) 一键装（v1.9+）
+curl -fsSL https://raw.githubusercontent.com/walkertop/pl-pipeline-standalone/main/install.sh | bash
+source ~/.zshrc
+
+# 2A) 起新项目
+pl new my-app --stack nextjs       # 或 fastapi / crawler / monorepo-trio / bare
+
+# 2B) 接入已有项目（v1.10+ 默认 dry-run，先看建议再决定）
+cd /your/existing/project
+pl detect                          # 只读，给出 stack 识别 + 推荐
+pl new whatever --here --stack bare   # 拍板后再装
 ```
+
+老姿势仍然 100% 兼容（手动 `export PL_HOME` + `pl adapter install`），见
+[`docs/cli-reference.md`](./docs/cli-reference.md)。
 
 ### Q: 我的技术栈没有现成 adapter 怎么办？
 
@@ -174,14 +182,17 @@ export PL_BUILD_CHECK_CMD="$(grep PL_BUILD_CHECK_CMD .pl-adapter.yaml | cut -d\"
 
 ### Q: 为什么不用 node / python 写？
 
-**MVP 阶段坚持纯 bash** 的原因：
+**长期坚持 bash + python3 stdlib** 的原因：
 
-1. **零安装**：bash 每台机器都有
-2. **无锁依赖**：不需要 `node_modules/` / `.venv/`
+1. **零安装**：bash / python3 每台 macOS / Linux 都有
+2. **无锁依赖**：不需要 `node_modules/` / `.venv/`，不和宿主项目的依赖打架
 3. **可读**：脚本小到一眼能看懂
 4. **好调试**：`bash -x` 就能追
 
-v0.2 起 CLI 可能用 node / go 重写，但那只是**上层包装**，核心脚本不动。
+> 这条已写入 [ROADMAP](./ROADMAP.md) 非目标：
+> ❌ 不重写核心为 Node.js / TypeScript / Python。
+> 早期 `experiments/cli-nodejs/`（曾短暂打了 `pl-v2.0.0-alpha` tag，后撤回）
+> 是历史教训，详见 [`experiments/README.md`](./experiments/README.md)。
 
 ---
 

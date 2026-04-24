@@ -2,6 +2,10 @@
 
 本文档指导你把 **v1.0 时代的 pl-pipeline 项目** 升级到 **v1.2.0**（retro-v2 收官版）。
 
+> 🆕 **新项目启动 ≠ 老项目升级**：如果你是**全新项目**，请直接看
+> [README §30 秒上手](./README.md#30-秒上手v110)（一键 `curl | bash` + `pl new`），
+> 不需要读本文档。本文档只服务于"已经在跑 v1.0 老项目想吸收 v1.2 新能力"的存量场景。
+
 > 📌 **v1.8+ 提示**：本文档保留 v1.2 时期的 `bash $PL_HOME/scripts/<x>.sh ...` 调用风格作为
 > 历史快照。**v1.8.0 起所有这些命令都有等价的 `pl <subcmd>` 形式**，
 > 一一对应见 [`docs/cli-reference.md`](./docs/cli-reference.md)。

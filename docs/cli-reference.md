@@ -1,19 +1,30 @@
-# pl CLI Reference (v1.8.0+)
+# pl CLI Reference (v1.10.0+)
 
 > 单入口 `pl <subcmd>` 取代散落的 `bash $PL_HOME/scripts/*.sh`。
 > dispatcher 0 业务逻辑，**所有 flag 透传给底层脚本**，老路径 100% 向后兼容。
 
 ## 安装 / 启用
 
+**推荐姿势（v1.9.0 起，零手工 export）**：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/walkertop/pl-pipeline-standalone/main/install.sh | bash
+source ~/.zshrc            # 或 ~/.bashrc
+pl --version               # → pl-pipeline ≥ 1.10.0
+pl doctor                  # 自检 python3 / jq / yq / 路径
+```
+
+**手动姿势（继续可用，CI 友好）**：
+
 ```bash
 export PL_HOME="/path/to/pl-pipeline-standalone"
 export PATH="$PL_HOME/bin:$PATH"
-pl --version          # → pl-pipeline 1.8.0
-pl doctor             # 自检 python3 / jq / yq / 路径
+pl --version
+pl doctor
 ```
 
-> 推荐写到 `~/.zshrc` / `~/.bashrc`。
 > `pl` 命令必须能找到正确的 `$PL_HOME`，dispatcher 默认从 `bin/` 上溯一级。
+> 多版本并存（项目锁版本）见 [README §多版本并存](../README.md#多版本并存进阶)。
 
 ---
 
@@ -27,6 +38,14 @@ pl doctor             # 自检 python3 / jq / yq / 路径
 | `pl env` | `_env.sh::pl_env_dump` | 打印所有 `PL_*` 环境变量 |
 | `pl doctor` | dispatcher 内置 | 自检 PATH / python3 / jq / yq / `$PL_HOME` |
 | `pl help [<sub>]` | — | 主帮助 / 透传子命令 `--help` |
+
+### 项目启动（v1.9 / v1.10）
+
+| 子命令 | 底层 | 说明 |
+|---|---|---|
+| `pl detect` / `pl scan` | `pl-detect.sh` | **只读**扫描当前目录，识别栈 + 给接入建议（不写文件） |
+| `pl new <name> --stack <s>` | `pl-new-project.sh` | 起新项目骨架（stack: `nextjs` / `fastapi` / `crawler` / `monorepo-trio` / `bare`） |
+| `pl new <name> --here [--stack <s>]` | `pl-new-project.sh` | 在已有项目原地接入；不带 `--stack` 时默认 `pl detect` dry-run |
 
 ### 核心命令
 
@@ -149,6 +168,16 @@ CI、agent prompt、第三方文档无须立刻迁移。
 ## 常见食谱
 
 ```bash
+# 0) 全新项目从零到第一个 change（v1.9+）
+pl new my-app --stack nextjs
+cd my-app
+export PL_PROJECT="$PWD"
+
+# 0') 已有项目先 detect 再决定（v1.10+）
+cd /your/existing/project
+pl detect                                      # 只读扫描
+pl new whatever --here --stack bare            # 拍板后再装
+
 # 起一个 change 并跑到 IMPLEMENT 验收
 pl init add-search --name "增加搜索" --domain ux
 pl run --change add-search --gate B1
