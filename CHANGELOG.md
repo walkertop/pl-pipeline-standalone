@@ -37,6 +37,57 @@
 > 🛠 **2026-04-24 v1.8.0**：统一 CLI 收口——`bin/pl` 一个入口替代 34 个散落的
 > `bash $PL_HOME/scripts/*.sh`。命名空间归口（`pl contract|trace|adapter|piao|...`），
 > 修掉 README 长期画饼的 `pl proposal/plan/report` 文档欺诈，老路径 100% 向后兼容。
+>
+> 📑 **2026-04-24 v1.8.1**：文档真实化第 1 弹——清掉 README 6 个死链
+> （pl-pipeline.dev / discord / twitter / your-org Roadmap）+ 重写 v2.0 愿景段
+> （不再画饼，承诺转 issue）+ "alpha 阶段" → "stable, dogfooded"，
+> 顺手修 `pl-status.sh: dirs[@]: unbound variable` 旧 bug（bash 3.2 + set -u 兼容）。
+
+---
+
+## [1.8.1] — 2026-04-24 · 文档真实化 + 旧 bug 📑
+
+### 背景
+
+v1.8.0 收口 CLI 后扫了一遍现实债，发现：
+- README 6 个死链（pl-pipeline.dev / discord / twitter / your-org Roadmap）
+- README 大段 v1.2 / "alpha 阶段" 文字（停在 2 个月前）
+- v2.0 愿景段还在画饼（Smart init / pl proposal/plan/...）
+- `pl-status.sh` 一个 bash 3.2 set -u 下的旧 bug 1.6+ 一直没修
+
+本版做"扎实化里程碑 1"：把这些丢分项一次清掉。
+
+### 修复
+
+- README 6 处死链全部删除，替换成 repo 内真实文档：
+  - `pl-pipeline.dev` → `./docs/cli-reference.md`
+  - `discord.gg/pl-pipeline` / `twitter.com/pl_pipeline` → 删除
+  - `github.com/your-org/pl-pipeline/projects` → `github.com/walkertop/pl-pipeline-standalone/issues`
+- 重写 v2.0 愿景段 → "v1.9+ 路线（未承诺）"，明确说"未承诺时间，社区 issue 排"
+- "🚧 v2.0 规划" 的 Smart Init / 多 IDE 适配两段全部删除（再不画饼）
+- "alpha 阶段" → "stable, 自吃狗粮中"
+- 现状段全面重写，反映 v1.5 → v1.7 → v1.8 真实进度（CDC 双向闭环 / 统一 CLI / CI 全绿纪律）
+- adapter 列表加上 Kotlin KMM（之前漏列）+ 注明 Next/FastAPI 已经过完整 CDC dogfood
+- `scripts/pl-status.sh: dirs[@]: unbound variable` 修复
+  - 原因：bash 3.2 + `set -u` 下 `local dirs=()` 空数组扩展 `"${dirs[@]}"` 触发
+  - 修复：在 for 之前 `[[ ${#dirs[@]} -eq 0 ]] && return 0`
+  - 验证：`bash scripts/pl-status.sh` 不再报 warning；`--self-check` 仍 OK
+
+### 文件变更
+
+| 文件 | 变更类型 |
+|---|---|
+| `README.md` | 修订 5 段（badge / 四件门禁 / CDC 闭环 / Smart Init 段删除 / 快速链接 / 现状） |
+| `scripts/pl-status.sh` | bug 修复（4 行） |
+| `VERSION` | `1.8.0` → `1.8.1` |
+| `CHANGELOG.md` | 加 v1.8.1 段 |
+
+### 已知边界
+
+- `pl-status.sh` 输出里仍有 `/pl:proposal <change-id>` 旧词（另一处文档欺诈），
+  留待 v1.8.2 全面切 pl CLI 时一并扫掉。
+- README 历史叙事保留 v1.2 / v1.5 / v1.7 节点（"v1.2 起稳定" / "v1.5 起就位"等），
+  这是合法的版本谱系，不算债。
 
 ---
 

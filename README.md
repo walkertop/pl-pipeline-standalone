@@ -7,7 +7,7 @@
   <img alt="stage" src="https://img.shields.io/badge/stage-stable-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="retro" src="https://img.shields.io/badge/retro--v2-4%2F4%20closed-success">
-  <a href="https://pl-pipeline.dev"><img alt="docs" src="https://img.shields.io/badge/docs-pl--pipeline.dev-black"></a>
+  <a href="./docs/cli-reference.md"><img alt="docs" src="https://img.shields.io/badge/docs-cli--reference-black"></a>
 </p>
 
 ---
@@ -93,44 +93,51 @@ pl dashboard --open                                # SSE 实时面板
 > 完整子命令列表：`pl help` 或见 [`docs/cli-reference.md`](./docs/cli-reference.md)。
 > 仍支持老用法 `bash $PL_HOME/scripts/<name>.sh ...`，CLI 是表层语义糖，向后 100% 兼容。
 
-### 四件新工具（v1.2 核心能力）
+### 四件核心机器门禁（v1.2 起稳定）
 
-| 脚本 | 作用 | 对应能力 | 产物 |
+| 命令 | 作用 | 对应能力 | 产物 |
 |---|---|---|---|
-| `pl-runner.sh` | 按 check 结果自动派生 gate 通过/阻塞 | **E1** 可执行契约层 | `trace` 事件 `gate.eval` |
-| `pl-smoke.sh` | boot 应用 → 轮询 ready → HTTP probe → 关停 | **E2** SMOKE 阶段 | `trace` 事件 `smoke.{boot,ready,probe,shutdown}` |
-| `piao-contract-drift-compute.sh` | adapter 声明 vs 宿主实况 diff | **E4** 契约-现实漂移 | `drift/<change>-contract.yaml` |
-| `pl-rule-scan.sh` | 消费 rule 的 YAML frontmatter 做 CI-grade linter | **E3** rule-as-code | `rule-scan/<change>.yaml` |
+| `pl run --gate D` | 按 check 结果自动派生 gate 通过/阻塞 | **E1** 可执行契约层 | `trace` 事件 `gate.eval` |
+| `pl smoke` | boot 应用 → 轮询 ready → HTTP probe → 关停 | **E2** SMOKE 阶段 | `trace` 事件 `smoke.{boot,ready,probe,shutdown}` |
+| `pl piao contract-drift` | adapter 声明 vs 宿主实况 diff | **E4** 契约-现实漂移 | `drift/<change>-contract.yaml` |
+| `pl rule-scan` | 消费 rule 的 YAML frontmatter 做 CI-grade linter | **E3** rule-as-code | `rule-scan/<change>.yaml` |
 
-这 4 个脚本的事件都合流到 **同一条** `pipeline-output/trace/<change>.events.jsonl`，
-piao ↔ pl 首次端到端合流，dashboard / CI 只需消费一个通道。
+事件都合流到 **同一条** `pipeline-output/trace/<change>.events.jsonl`，
+dashboard / CI 只需消费一个通道。
+
+### 后续 CDC 闭环（v1.7+）
+
+| 命令 | 作用 |
+|---|---|
+| `pl trace use --change <id> --kind capability --id <c>` | 写消费事件（事实流） |
+| `pl contract aggregate` | 聚合事实流 → 每个 change 的 consumer-pact.yaml |
+| `pl contract verify [--strict]` | 对账 satisfied / warn / broken |
+| `pl contract query --capability <c>` | 反查谁在用某能力（决策前事实查询） |
+
+dashboard 首页有 pact 角标，详情页可下钻看 violation 源文件路径。
 
 ### 不想立刻用新能力？
 
-**完全不用做任何事**。v1.2 对 v1.0 完全向后兼容：
-- 不填 adapter.yaml 的 `smoke` / `contract` 段 → E2 / E4 自动 skip
-- rule 不加 frontmatter → `pl-rule-scan.sh` 返回 "no executable rules"
-- 原有 `pl-status.sh` / `pl-dashboard-refresh.sh` 入口和行为不变
+**完全不用做任何事**。v1.8 对 v1.0 完全向后兼容：
+- 不填 `adapter.yaml` 的 `smoke` / `contract` / `provides.capabilities` 段 → 对应 gate 自动 skip
+- rule 不加 frontmatter → `pl rule-scan` 返回 "no executable rules"
+- 老脚本路径 `bash $PL_HOME/scripts/<x>.sh ...` 全部继续工作
 
-从 v1.0 升级到 v1.2 见 [`MIGRATION.md`](./MIGRATION.md)，三步走，每一步都是 opt-in 增量。
+升级路径见 [`MIGRATION.md`](./MIGRATION.md)，每一步都是 opt-in 增量。
 
-### v2.0 愿景（未来体验）
+### v1.9+ 路线（未承诺）
 
-> 🚧 v1.8 已实现统一 `pl <subcmd>` 入口；下面是 v2.0 进一步规划，目前**未实现**：
-> 阶段语义糖（`pl proposal/plan/implement/verify/archive`）+ MCP Server + 自动 Smart Init。
-> v1.8 的 `pl run --gate <X>` 已经能覆盖每个阶段的门禁执行。
+v1.8 已经把"AI-First R&D 操作系统"的最小可用闭环交付完整：
+**6 阶段 + 7 门禁 + 7 产物 + CDC 双向闭环 + 统一 CLI + 可视面板**。
 
-```bash
-npx pl-pipeline init --smart     # v2.0：自动扫描技术栈并推荐 adapter
-pl proposal add-user-login       # v2.0：阶段语义糖 = 当前 pl init + pl run --gate A0
-pl plan add-user-login           # v2.0：阶段语义糖 = 当前 pl run --gate B1
-pl implement add-user-login      # v2.0：阶段语义糖 = 当前 pl run --gate D
-pl verify add-user-login         # v2.0：阶段语义糖 = 当前 pl run --gate E + pl smoke
-pl archive add-user-login        # v2.0：阶段语义糖 = 当前 pl run --gate G + pl retro-mine
-```
+下一步可能方向（按 issue 排优先级，**未承诺时间**）：
 
-v2.0 是 TypeScript CLI + MCP Server 重写，v1.x 的 schema / 产物 / 门禁语义会保持兼容。
-**现在用 v1.8 完全不浪费**。
+- 阶段语义糖：`pl proposal/plan/implement/verify/archive` 包装 `pl init + pl run --gate <X>`
+- 多 IDE adapter：`pl init --ide cursor|claude-code|codex` 自动生成各 IDE 的提示词布局
+- adapter 生态扩展：Go / Rust / Kotlin
+- MCP Server：让任何 MCP 兼容 IDE 直连 pl-pipeline
+
+社区贡献欢迎在本 repo 提 issue / PR 讨论。
 
 ---
 
@@ -159,44 +166,20 @@ SPEC ──A0──▶ PLAN ──B1──▶ IMPLEMENT ──C/D──▶ VERIF
 | `deps.md` | SPEC/PLAN | 依赖分析 |
 | `.state.md` | 全阶段 | **阶段真相源**（唯一 Source of Truth） |
 
-### 🧠 Smart Init（零配置接入）
+### 🧰 已有 Adapter（v1.8 验证可用）
 
-> 🚧 **v2.0 规划**（未实现）。当前 v1.2 手动接入见上面"30 秒上手"。
+- **Next.js Web** (`adapter-nextjs-web`) — 已在 demo-nextjs-todo 跑通完整 CDC 闭环
+- **Python FastAPI** (`adapter-python-fastapi`) — 已在 demo-fastapi-users 跑通完整 CDC 闭环
+- **Kotlin Multiplatform** (`adapter-kotlin-kmm`) — 已具备 capabilities，未做大规模 dogfood
 
-```bash
-npx pl-pipeline init --smart   # v2.0 愿景命令
+新 adapter 见 [`docs/guides/adapter-authoring.md`](./docs/guides/adapter-authoring.md)，
+脚手架命令：`pl adapter create my-stack --full`。
 
-🔍 Scanning your project...
-  ✓ Detected language: Kotlin (Multiplatform)
-  ✓ Detected build tool: Gradle
-  ✓ Detected test framework: JUnit
+### 🔌 多 IDE 接入
 
-📦 Recommended preset: @pl/preset-kotlin-kmm
-  Will install:
-    • rules/kotlin-coding-standards.md
-    • skills/kotlin-serialization.md
-    • adapters/gradle.yaml
-
-? Apply recommended preset? (Y/n)
-```
-
-支持的 Preset 技术栈（v1.2 已有 adapter）：
-- **Next.js Web** (`adapter-nextjs-web`) ✅
-- **Python FastAPI** (`adapter-python-fastapi`) ✅
-- Kotlin KMM / Rust Cargo / Go Modules — v1.3+ 规划
-- 社区贡献的迁移专用包如 `weex-to-kuikly` / `vue2-to-vue3` — v1.3+ 规划
-
-### 🔌 多 IDE 适配（MCP First）
-
-> 🚧 **v2.0 规划**（未实现）。当前 v1.2 通过 adapter 的 `rules/` / `agents/` / `skills/` 目录被任何读 `.codebuddy/` / `.cursor/` / `.claude/` 的 IDE 消费。
-
-```bash
-pl init --ide mcp          # v2.0 愿景：通过 MCP 协议适配所有兼容 IDE
-pl init --ide cursor       # v2.0 愿景：生成 .cursor/rules/
-pl init --ide claude-code  # v2.0 愿景：生成 .claude/commands/
-pl init --ide codebuddy    # v2.0 愿景：生成 .codebuddy/commands/
-pl init --ide codex        # v2.0 愿景：生成 AGENTS.md 片段
-```
+v1.8 通过 adapter 的 `rules/` / `agents/` / `skills/` 资产被任何读
+`.codebuddy/` / `.cursor/` / `.claude/` / `.codex/` 的 AI IDE 消费。
+不需要专门的 MCP server——ARCHIVE 阶段沉淀的资产会被各 IDE 自动加载。
 
 ### 🏗️ 构建/测试适配层
 
@@ -250,27 +233,26 @@ commands:
 
 ## 快速链接
 
-- 📖 [文档站](https://pl-pipeline.dev)
-- 🎮 [在线 Playground](https://pl-pipeline.dev/playground)
-- 🖼 [案例 Gallery](https://pl-pipeline.dev/gallery)
-- 💬 [Discord 社区](https://discord.gg/pl-pipeline)
-- 🐦 [Twitter / X](https://twitter.com/pl_pipeline)
-- 📋 [Roadmap](https://github.com/your-org/pl-pipeline/projects)
+- 📖 [CLI Reference](./docs/cli-reference.md)
+- 📖 [Dashboard 使用指南](./docs/dashboard-guide.md)
+- 📖 [Adapter 编写指南](./docs/guides/adapter-authoring.md)
+- 📋 [CHANGELOG](./CHANGELOG.md) — 所有版本变更
+- 🐛 [Issues](https://github.com/walkertop/pl-pipeline-standalone/issues) — 反馈 / 讨论 / Roadmap
 
 ---
 
-## 现状
+## 现状（v1.8.0 · 2026-04-24）
 
-**pl-pipeline 目前处于 alpha 阶段**。
+**pl-pipeline 已进入 stable，自吃狗粮中**。
 
-- ✅ 核心引擎已验证：在 Kotlin Multiplatform 大型迁移项目中完成 11/16 任务（4831 行代码、0 回归、全程可追溯）
-- ✅ 6 阶段 + 7 门禁 + 7 产物契约稳定
-- ✅ **三层架构已就位**（piao-kernel / pl-core / adapters）
-- ✅ **首批 adapter 开放**（`adapter-nextjs-web` / `adapter-python-fastapi`）
-- ✅ **adapter 脚手架可用**（`scripts/adapter-create.sh`）
-- 🚧 多 IDE Adapter 正在开发
-- 🚧 社区贡献的 adapter 生态建设中
-- 🚧 文档站和 Playground 建设中
+- ✅ 6 阶段 + 7 门禁 + 7 产物契约稳定（v1.0 起）
+- ✅ 三层架构（piao-kernel / pl-core / adapters）已就位（v1.5 起）
+- ✅ 观测层从"事件流"升级为"契约系统"（v1.6 → v1.7）
+- ✅ CDC 双向闭环：trace use → aggregate → verify → query → dashboard 角标 → drill-down（v1.7.0 → v1.7.3）
+- ✅ 统一 CLI `pl <subcmd>` 收口 34 个脚本（v1.8.0）
+- ✅ CI 全绿，已落地"打 tag 前 CI 必须绿"纪律（v1.7.3.1 教训）
+- ✅ 已有 adapter：Next.js / FastAPI / Kotlin KMM（前两个完整 CDC dogfood）
+- 🚧 v1.9+ 路线见 [Issues](https://github.com/walkertop/pl-pipeline-standalone/issues)，未承诺时间
 
 ### Adapter 全家桶
 
