@@ -7,58 +7,88 @@
 
 ## 当前版本
 
-- **v1.5.0**（2026-04-23）：Core Assets Migration · RELEASE 🎉 — 三层资产栈落地，11 资产完成脱敏迁移，新增 adapter-kotlin；0 硬耦合。发布说明见 [`docs/milestones/2026-04-v1.5.0-release.md`](./docs/milestones/2026-04-v1.5.0-release.md)
-- **v1.3.2**（2026-04-23）：Dashboard live reload 稳定版（SSE 实时推送 + per-subscriber snapshot 修复 + 用户手册）
-- **v1.4.0-alpha**（2026-04-22）：retro-miner 四类离线 pattern 挖掘（频次/共现/反模式/异常）
-- **v1.3.0-alpha**（2026-04-22）：Observe 层 MVP（event v1.3 schema + fs watcher + 规则引擎 + Dashboard 双视图）
-- **v1.2.0**（2026-04-22）：retro-v2 收官版（E1~E4 闭环，4/4 通用抽象落地）
+- **v1.10.0**（2026-04-24）：`pl detect` / `pl scan` 扫描已有项目给出建议，`pl new --here` 默认改为只读 dry-run（不再硬塞模板）
+- **v1.9.x**（2026-04-24）：zero-friction 上手 — `install.sh` 一行装到 `~/.pl-pipeline`，`pl new my-app --stack <stack>` 10 秒起项目
+- **v1.8.x**（2026-04-24）：`bin/pl` 统一 CLI 入口收口 34 个 scripts；自吃狗粮（agent/文档/CI 全切到 `pl xxx` 形式）；首批 29 个 CLI 单元测试
+- **v1.7.x**（2026-04-24）：**CDC 双向闭环**（consumer-driven contracts）— `adapter.use` trace → `pl-contract-aggregate` 聚合 pact → `pl-contract-verify` 在 adapter PR 上拦 breaking → Dashboard 显示 pact 健康度 + drill-down → `pl-contract-query` 反查谁在用某 capability/skill
+- **v1.6.x**（2026-04-24）：观察层"不可被绕过"硬约束 — trace 信封补 `change_id` + span 因果树 + active 时间统计代理 + adapter `provides.capabilities[]` 抽象层
+- **v1.5.0**（2026-04-23）：Core Assets Migration · RELEASE 🎉 — 三层资产栈落地，11 资产完成脱敏迁移，新增 adapter-kotlin；0 硬耦合
+- **v1.3.2**（2026-04-23）：Dashboard live reload 稳定版（SSE 实时推送 + per-subscriber snapshot 修复）
 - **v0.1.0-mvp**（2026-04-21）：独立仓建立 + 三层架构 + 2 个 reference adapter + 2 个端到端 demo
 
-> 📖 v1.3.x 系列阶段性总结：[`docs/milestones/2026-04-v1.3.x-summary.md`](./docs/milestones/2026-04-v1.3.x-summary.md)
 > 📖 v1.5.0 发布说明：[`docs/milestones/2026-04-v1.5.0-release.md`](./docs/milestones/2026-04-v1.5.0-release.md)
-> 🗺 v1.6+ 规划：[`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)
+> 📖 v1.7.0 CDC 闭环：[`docs/milestones/2026-04-v1.7.0-release.md`](./docs/milestones/2026-04-v1.7.0-release.md)
+> 📖 v1.7 立项过程（为何从 Path H 改道 CDC）：[`docs/milestones/v1.7-cdc-emergence.md`](./docs/milestones/v1.7-cdc-emergence.md)
+> 🗺 v1.6+ 原始规划（已部分被实际路径取代）：[`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)
+> 📜 详细变更：[`CHANGELOG.md`](./CHANGELOG.md)
 
 ---
 
-## 下一阶段（2026-04 末 ~ Q2）· 观察层从"能看"到"能用"
+## 已完成阶段（2026-04 末）· 观察层从"能看"到"能用"
 
 主线：**工具产出的数据本身开始成为价值载体**。
 
-> ✅ **2026-04-23 v1.5 已完成**：核心资产栈从 KuiklyPolyCity 完成迁移，pl-pipeline-standalone
-> 不再"空壳"。详见 [`docs/milestones/2026-04-v1.5.0-release.md`](./docs/milestones/2026-04-v1.5.0-release.md)。
-> **下一步的 4 条路径及推荐序列**见 [`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)。
+> ✅ **2026-04-23 v1.5 完成**：核心资产栈从 KuiklyPolyCity 完成迁移。
+> ✅ **2026-04-24 v1.6→v1.10 一日完成**：CDC + CLI 收口 + zero-friction 安装 + detect。
+> **原始规划**见 [`docs/milestones/v1.6-next-planning.md`](./docs/milestones/v1.6-next-planning.md)，
+> **实际改道为何**见 [`docs/milestones/v1.7-cdc-emergence.md`](./docs/milestones/v1.7-cdc-emergence.md)。
 
-| # | 里程碑 | 目标 | 投入 | 依赖 | 状态 |
-|---|--------|------|------|------|------|
-| A | `v1.3.2` 转正 | 把 alpha.2 升级为稳定版 tag | 10 分钟 | 无 | ✅ 已完成（pl-v1.3.2） |
-| **v1.5** | **核心资产迁移** | spec-normalizer 等 11 个通用资产脱敏迁到独立仓 + 新 adapter-kotlin | 1 天 | 无 | ✅ 已完成（pl-v1.5.0） |
-| — | 辩证方法论文档 | 让模糊需求在格式化工具里有容身之地 | 已完成 | — | ✅ `docs/guides/working-with-fuzzy-intent.md` |
-| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | 26min | **v1.5 ✅** | ✅ 已完成（Pomodoro Timer v0.1） |
-| F | 扩充 adapter 生态（android / kmp-kuikly / go） | 证明栈级 adapter 机制可复用 | 4–5 天 | E' ✅ | 🟡 待做 |
-| G | v0.2 CLI 打包（`pl init`）| 降低使用门槛 30 秒上手 | 5–7 天 | E' ✅ | 🟡 待做 |
-| H | retro-miner 真实 trace 挖掘链路（B→C→D） | 闭合"观察-挖掘-反馈"飞轮 | 2–3 天 | E' ✅ | 🟡 待做 |
+| # | 里程碑 | 目标 | 状态 |
+|---|--------|------|------|
+| A | `v1.3.2` 转正 | dashboard 稳定版 tag | ✅ 已完成（pl-v1.3.2） |
+| **v1.5** | **核心资产迁移** | spec-normalizer 等 11 个通用资产脱敏迁到独立仓 + 新 adapter-kotlin | ✅ 已完成（pl-v1.5.0） |
+| — | 辩证方法论文档 | 让模糊需求在格式化工具里有容身之地 | ✅ `docs/guides/working-with-fuzzy-intent.md` |
+| E' | 干净新需求跑一次完整 observe + dashboard | 产出真实 trace 作为后续分析的数据源 | ✅ 已完成（Pomodoro Timer v0.1） |
+| **v1.6** | 观察层硬约束 | trace 信封 + 因果树 + active 时间代理 + adapter capabilities | ✅ 已完成（pl-v1.6.x） |
+| **v1.7** | **CDC 双向闭环**（计划外 ⚠️） | adapter.use → aggregate pact → verify 拦 breaking → dashboard drill-down → query 反查 | ✅ 已完成（pl-v1.7.0~1.7.3.1） |
+| **v1.8** | 统一 CLI + 自吃狗粮 + 测试 | `bin/pl` 收口 34 个脚本；agent/docs/CI 全切 `pl xxx`；29 个 CLI 单测 | ✅ 已完成（pl-v1.8.0~1.8.4） |
+| **v1.9** | zero-friction 上手 | `install.sh` 一行装；`pl new --stack` 10 秒起项目 | ✅ 已完成（pl-v1.9.0~1.9.1） |
+| **v1.10** | `pl detect` + `--here` 安全化 | 已有项目接入：先扫描后建议，不再硬塞模板 | ✅ 已完成（pl-v1.10.0） |
+| F | 扩充 adapter 生态（android / kmp-kuikly / go） | 证明栈级 adapter 机制可复用 | 🟡 未做 |
+| H | retro-miner 真实 trace 挖掘链路（B→C→D） | 闭合"观察-挖掘-反馈"飞轮 | 🟡 未做（被 v1.7 CDC 替代部分动机） |
+
+### 与 v1.6 原始规划的差异
+
+`v1.6-next-planning.md` 推荐序列是 `E' → H (retro-miner) → F (adapter) → G (CLI)`。
+实际走的是 `E' → v1.6 观察硬约束 → v1.7 CDC → v1.8 CLI 收口 → v1.9 install → v1.10 detect`。
+
+**对应关系**：
+- Path G（CLI）→ 由 v1.8 `bin/pl`（**bash 实现**，符合"零依赖薄壳"非目标）+ v1.9 install.sh + v1.10 detect 完成
+- Path H（retro-miner B→C→D）→ **未做**。当时的判断：retro-miner 在没有真实生产 trace 之前，挖出的 pattern 都是工具链自身噪音，**先建立"事实账本"（CDC pact）比"挖掘"更紧迫**。
+- Path F（更多 adapter）→ 未做。等 KuiklyPolyCity 真正切到 adapter 模式后再决定 adapter 优先级（避免没真实需求驱动就发明 adapter）。
 
 ### E' 已完成 ✅
 
 **场景**：新建 Next.js 番茄时钟 app（Pomodoro Timer v0.1），完整走完 proposal → plan → implement → verify → archive 六步。
-**结论**：v1.5.0 核心资产栈通过全链路验证，3/5 目标达成，2 项需后续用 orchestrator 补验。
+**结论**：v1.5.0 核心资产栈通过全链路验证，3/5 目标达成。
 **Retro**：[`docs/retros/v1.5-real-run/retro.md`](./docs/retros/v1.5-real-run/retro.md)
-**改进建议**：3 条 P2/P3 已归档到 v1.6 backlog（stages_override / trace-emit 示例 / adapter-install 提示）。
 
 ---
 
-## v0.2 — 开箱即用（计划 Q3 2026）
+## v0.2 — 开箱即用 ✅ 已提前于 2026-04-24 通过 v1.8~v1.10 完成
 
-目标：**让"装 pl-pipeline"这件事 30 秒内完成**，不再需要手写路径 / export 变量。
+原计划 Q3 2026，实际**用 bash 路线一日推完**（v1.8.0 起）。
 
 | 类别 | 能力 | 状态 |
 |---|---|---|
-| 打包 | `npm install -g pl-pipeline` 全局 CLI | 📝 设计中 |
-| CLI | `pl init` 在任意项目根下创建 `pl/` + `.codebuddy/` 骨架 | 📝 |
-| CLI | `pl init --smart` 扫描 `package.json`/`pyproject.toml`/`Cargo.toml` 自动推荐 adapter | 📝 |
-| CLI | `pl install-adapter <id>` 替代当前 `bash scripts/adapter-install.sh ...` | 📝 |
-| CLI | `pl doctor` 检查 `requires.tools` 依赖是否齐全 | 📝 |
+| 安装 | `curl ... \| install.sh` 一键装到 `~/.pl-pipeline` | ✅ v1.9.0 |
+| CLI | `bin/pl` 统一入口（**bash 实现**，零 npm/pip 依赖） | ✅ v1.8.0 |
+| CLI | `pl new <name> --stack <stack>` 起新项目（含骨架 + adapter + git init） | ✅ v1.9.0 |
+| CLI | `pl detect` / `pl scan` 扫描已有项目 + 建议（替代旧的 `pl init --smart`） | ✅ v1.10.0 |
+| CLI | `pl new --here --stack <stack>` 在已有项目内 inject pl 骨架 | ✅ v1.9.x |
+| CLI | `pl adapter <id>` 装 adapter（替代 `bash scripts/adapter-install.sh ...`） | ✅ v1.8.0 |
+| CLI | `pl doctor` 检查 `requires.tools` 依赖 | ✅ v1.8.0 |
 | 脚本 | 所有 `bash scripts/*.sh` 保持存在并可用（作为 lower-level 接口） | ✅ |
+
+> **关键决策回顾**：原计划 Path G 写的是"`npm install -g pl-pipeline`"。实际选择**完全
+> 用 bash 实现**，理由：
+> (1) 不引入 node 依赖，保持"macOS bash 3.2 / Linux 都能跑"的承诺；
+> (2) 用户只需 `curl ... | bash` 一行；
+> (3) 与既有 `scripts/*.sh` 路径同构，不存在"两套 CLI 语义不一致"的风险。
+>
+> Node.js 平行实验存放在 [`experiments/cli-nodejs/`](./experiments/cli-nodejs/)，
+> **不进入安装链路、不打 pl-vX 风格 tag**（v2.0.0-alpha 教训详见
+> [`experiments/README.md`](./experiments/README.md)）。
 
 ### v0.2 本体增强（retro-v2 驱动）
 
@@ -182,6 +212,9 @@ v0.2 的 adapter.yaml schema 从 `pl.dev/v1` → `pl.dev/v1.1`，新增字段：
 - ❌ **不变成 PMP 工具**：Jira / Linear 的职责保留给它们自己
 - ❌ **不做商业 SaaS**：核心永远开源免费；未来若有企业付费版也不影响核心演进
 - ❌ **不强耦合任何 LLM**：pl-pipeline 对 AI IDE 的需求只是"能读写 markdown 文件"
+- ❌ **不重写核心为 Node.js / TypeScript / Python**：bash + python3 stdlib 是承诺。
+  任何重写实验只能放 `experiments/`，不进 `install.sh` / `bin/pl` / 不打 `pl-vX` tag
+  （v2.0.0-alpha 已被撤销，详见 [`experiments/README.md`](./experiments/README.md)）。
 
 ---
 

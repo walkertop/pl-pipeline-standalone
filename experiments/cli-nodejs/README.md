@@ -1,16 +1,28 @@
-# pl — pl-pipeline CLI
+# pl-pipeline CLI · Node.js 实验实现
 
-> 零依赖 · 薄壳封装 · 在任何终端可用（VS Code / Claude Code / iTerm / Warp）
+> ⚠️ **实验性 · 不推荐使用**。详见上一级 [`experiments/README.md`](../README.md)。
+>
+> **主线 CLI 是 `bin/pl`**（bash 实现，v1.8.0+），完整实现 `pl new` / `pl run` /
+> `pl detect` / `pl smoke` / `pl dashboard` / `pl contract *` 等所有命令，且
+> 与 ROADMAP 的"零 npm/pip 依赖"承诺一致。
+>
+> 本目录是 2026-04-23 启动的 Node.js 平行实验，**没有进入主流程**：
+> - `install.sh` 不会装它
+> - `pl new` 不会用它
+> - `pl-v2.0.0-alpha` tag 已撤（详见上级 README 的"历史教训"）
+>
+> 是否提升为正式分支由后续 `docs/milestones/v2.0-cli-rewrite-rfc.md` 决定。
 
-## 安装
+---
+
+## 安装（仅供开发者本地试用）
 
 ```bash
 # 方式一：全局 link（开发期）
-cd pl-pipeline-standalone/cli
+cd pl-pipeline-standalone/experiments/cli-nodejs
 npm link
 
-# 方式二：全局安装（发布后）
-npm install -g pl-pipeline
+# ❌ 不要 npm install -g pl-pipeline —— 包尚未发布，且名字将会变
 ```
 
 验证：

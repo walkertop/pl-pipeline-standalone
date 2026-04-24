@@ -9,12 +9,12 @@ const path = require("path");
 const fs = require("fs");
 
 /**
- * Resolve PL_HOME: env var > cli package root (../../ from cli/lib/)
+ * Resolve PL_HOME: env var > package root (../../../ from experiments/cli-nodejs/lib/)
  */
 function getPLHome() {
   if (process.env.PL_HOME) return process.env.PL_HOME;
-  // cli/ lives inside pl-pipeline-standalone/cli/
-  const plHome = path.resolve(__dirname, "..", "..");
+  // experiments/cli-nodejs/lib/ → pl-pipeline-standalone/
+  const plHome = path.resolve(__dirname, "..", "..", "..");
   if (!fs.existsSync(path.join(plHome, "scripts"))) {
     die(`Cannot find pl-pipeline scripts. Set PL_HOME or install pl-pipeline globally.`);
   }

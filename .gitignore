@@ -50,6 +50,7 @@ build/
 out/
 lib/
 !cli/lib/
+!experiments/cli-nodejs/lib/
 *.tsbuildinfo
 .turbo/
 .next/
