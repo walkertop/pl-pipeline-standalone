@@ -1,0 +1,32 @@
+# DEMO PLACEHOLDER — Replace by running:
+#   pl adapter install $PL_HOME/adapters/adapter-nextjs-web .
+# This file documents the EXPECTED post-install state for reference only.
+
+apiVersion: pl.dev/v1
+adapter:
+  id: nextjs-web
+  version: 0.1.0
+  name: "Next.js Web 全家桶"
+  installed_at: "DEMO-PLACEHOLDER"
+  installed_from: "$PL_HOME/adapters/adapter-nextjs-web"
+  source_sha256: "DEMO-PLACEHOLDER"
+
+installed_files:
+  - pl/templates/spec.md
+  - pl/templates/plan.md
+  - pl/templates/taskdag.md
+  - .codebuddy/agents/nextjs-architect.md
+  - .codebuddy/agents/nextjs-reviewer.md
+  - .codebuddy/skills/rsc-server-actions.md
+  - .codebuddy/skills/nextjs-routing.md
+  - .codebuddy/rules/typescript-strict.md
+  - .codebuddy/rules/nextjs-conventions.md
+  - scripts/adapter-nextjs-web-build.sh
+  - scripts/adapter-nextjs-web-verify.sh
+
+build_adapter:
+  type: npm
+  env:
+    PL_BUILD_CHECK_CMD: "npm run typecheck"
+    PL_LINT_CMD: "npm run lint"
+    PL_TEST_CMD: "npm test"

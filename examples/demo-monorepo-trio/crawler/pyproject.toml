@@ -1,0 +1,15 @@
+[project]
+name = "demo-monorepo-trio-crawler"
+version = "0.1.0"
+description = "Demo crawler module (no adapter, bare pl-core)"
+requires-python = ">=3.11"
+dependencies = [
+  "scrapy>=2.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

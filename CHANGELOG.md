@@ -54,6 +54,72 @@
 > 给 CDC 加 3 个真实场景测试（demo-nextjs / demo-fastapi 全闭环 + dashboard endpoint），
 > CI 加两个新 job：`cli-smoke` + `cdc-real-scenarios`。
 > 自此 v1.8.x CLI 改一行就有 32 个测试守。**v1.8.x 收官**。
+>
+> 🏗️ **2026-04-24 v1.8.4 · monorepo 接入指南 + demo-trio**：把"前端 + Python 服务端 + 爬虫"
+> 三模块从 0 到 1 接入 pl-pipeline 的完整心智模型 / 步骤 / 可跑骨架沉淀成文档与示例，
+> 关键澄清"无 adapter 的模块（爬虫/Go/Rust）也能裸跑 pl-core"。
+
+---
+
+## [1.8.4] — 2026-04-24 · Monorepo Quickstart + demo-trio 🏗️
+
+### 背景
+
+用户反馈："准备把 pl-pipeline 用在一个全新仓库，里面有前端、Python 服务端、爬虫三个模块，
+怎么接？爬虫没专属 adapter 是不是必须新写一个？"
+
+这个问题其实是一类问题：**多模块 monorepo 接入策略 + 无 adapter 模块怎么办**，
+v1.8.x 之前的文档只默认"一个项目一个 adapter"，没有显式覆盖。
+
+### 新增
+
+**1. `docs/guides/monorepo-quickstart.md`（10 节完整指南）**
+
+   - 心智模型：`PL_PROJECT` 不必是 git 根，可以是子目录 → monorepo 自然支持 N 个独立宿主
+   - 推荐目录结构（frontend / api / crawler 三模块平级 + pl-pipeline 工具独立 clone）
+   - 一次性准备（`PL_HOME` + `PATH` + `pl doctor`）
+   - 三个模块分别接入：nextjs adapter / fastapi adapter / **裸 pl-core + 自定义 build.yaml**
+   - 日常工作流：用 `direnv` 自动切 `PL_PROJECT`
+   - 跨模块协作 change 三种策略（推荐每模块各起 + 命名呼应）
+   - CDC 在 monorepo 下的姿势（每模块独立 aggregate/verify/dashboard）
+   - CI 接入示例（每模块一个 job + paths filter 省配额）
+   - FAQ 5 条 + 心智清单 8 条
+
+**2. `examples/demo-monorepo-trio/`（可 cp 走改的可跑骨架）**
+
+   - `frontend/` — Next.js 模块，含 demo `.pl-adapter.yaml` 占位
+   - `api/` — FastAPI 模块，含 demo `.pl-adapter.yaml` 占位
+   - `crawler/` — 爬虫模块，**无 adapter**，自带 `pl/adapters/build.yaml`
+   - 每个模块都已经真跑过 `pl init add-demo-feature`，`.state.md` 在位
+   - `README.md` 给出"复用步骤"：cp → 删 demo change → 真实 install → 起自己的 change
+
+**3. README.md 更新**
+
+   - "已有 Adapter" 段加"未单列 adapter 怎么办"段：明确裸 pl-core + 手动 cherry-pick 通用 rule 的姿势
+   - 30 秒上手段顶部加"多模块项目？"分叉提示，导向 quickstart
+   - 快速链接段加 monorepo quickstart 入口
+
+### 核心澄清
+
+| 老想法 | v1.8.4 后正确认知 |
+|---|---|
+| "monorepo 只能装 1 个 adapter" | 每模块独立 `PL_PROJECT`，各装各的 |
+| "没 adapter 就用不了 pl-pipeline" | 裸 pl-core 完全能用，gate 自动 skip |
+| "爬虫得新写 adapter" | 不必。手动 cherry-pick `python-typing-strict.md` 等通用 rule 即可 |
+| "跨模块需求要塞一个 change" | 推荐每模块各起一个，spec.md 互引 |
+
+### 影响
+
+- **零代码改动** —— 纯文档 + example，本质是把 v1.8.x 已经具备但没说清的能力沉淀出来
+- **不扩 adapter 生态** —— 严格遵守"先把当前做扎实"的策略，不引入 crawler/Go adapter
+- **example 可跑可改** —— `pl init` / `pl status` 在三模块上都真实跑通过
+
+### 升级路径
+
+无 breaking。直接拉 `pl-v1.8.4`。
+
+> 至此 v1.8.x 系列正式完整：v1.8.0 统一 CLI → v1.8.1 文档真实化 → v1.8.2 自吃狗粮 →
+> v1.8.3 测试扎实 → v1.8.4 多模块接入心智补齐。
 
 ---
 
