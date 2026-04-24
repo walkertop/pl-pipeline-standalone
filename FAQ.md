@@ -47,14 +47,15 @@
 
 ```bash
 export PL_HOME=/path/to/pl-pipeline-standalone
+export PATH="$PL_HOME/bin:$PATH"     # 启用 pl CLI
 cd your-project
-bash $PL_HOME/scripts/adapter-install.sh $PL_HOME/adapters/adapter-nextjs-web .
+pl adapter install $PL_HOME/adapters/adapter-nextjs-web .
 ```
 
 ### Q: 我的技术栈没有现成 adapter 怎么办？
 
 ```bash
-bash $PL_HOME/scripts/adapter-create.sh my-stack --full
+pl adapter create my-stack --full
 # 按 assets/adapter-sdk/docs/adapter-authoring-guide.md 填内容
 # 有时间请 PR 回来 ❤️
 ```

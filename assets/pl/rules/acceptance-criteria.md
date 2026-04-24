@@ -158,7 +158,7 @@ sanitization_date: 2026-04-23
 
 # 2. 禁止模式扫描（栈级）
 #    由栈级 rule 通过 pl-rule-scan.sh 执行
-bash $PL_HOME/scripts/pl-rule-scan.sh --severity error --fail-on-first
+pl rule-scan --severity error --fail-on-first
 
 # === P1 人工检查 ===
 # 3. 架构合规  → 栈级 architecture reviewer agent

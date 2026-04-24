@@ -46,12 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: pl-status --self-check (on this repo via env override)
+      - name: pl status --self-check (via pl CLI; on this repo via env override)
         run: |
-          # 本仓 examples 是宿主；每个 demo 都可被 pl-status 识别
+          export PATH="$PWD/bin:$PATH"
+          # 本仓 examples 是宿主；每个 demo 都可被 pl status 识别
           for demo in examples/*/; do
             echo "=== $demo ==="
-            PL_PROJECT="$PWD/$demo" bash scripts/pl-status.sh --self-check
+            PL_PROJECT="$PWD/$demo" pl status --self-check
           done
 
   # -----------------------------------------------------------------
@@ -71,13 +72,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate ${{ matrix.adapter }}
-        run: bash scripts/adapter-validate.sh adapters/${{ matrix.adapter }}
+        run: |
+          export PATH="$PWD/bin:$PATH"
+          pl adapter validate adapters/${{ matrix.adapter }}
 
       - name: Dry-run install into tmp host
         run: |
+          export PATH="$PWD/bin:$PATH"
           mkdir -p /tmp/ci-host/pl
           cp assets/pl/config.default.yaml /tmp/ci-host/pl/config.yaml
-          bash scripts/adapter-install.sh --dry-run \
+          pl adapter install --dry-run \
             adapters/${{ matrix.adapter }} /tmp/ci-host
 
   # -----------------------------------------------------------------
@@ -94,18 +98,21 @@ jobs:
       # 'adapter-' 前缀），所以 CI 这里 id 必须等于 dest basename，否则 v1.5+ 起一定红。
       - name: Minimal scaffold validates
         run: |
-          bash scripts/adapter-create.sh ci-min --dest /tmp/ci-min
-          bash scripts/adapter-validate.sh /tmp/ci-min
+          export PATH="$PWD/bin:$PATH"
+          pl adapter create ci-min --dest /tmp/ci-min
+          pl adapter validate /tmp/ci-min
 
       - name: Full scaffold validates
         run: |
-          bash scripts/adapter-create.sh ci-full --dest /tmp/ci-full --full
-          bash scripts/adapter-validate.sh /tmp/ci-full
+          export PATH="$PWD/bin:$PATH"
+          pl adapter create ci-full --dest /tmp/ci-full --full
+          pl adapter validate /tmp/ci-full
 
       - name: Invalid id must fail
         run: |
-          if bash scripts/adapter-create.sh "Bad_ID" --dest /tmp/ci-bad >/dev/null 2>&1; then
-            echo "::error::adapter-create should reject invalid id"
+          export PATH="$PWD/bin:$PATH"
+          if pl adapter create "Bad_ID" --dest /tmp/ci-bad >/dev/null 2>&1; then
+            echo "::error::pl adapter create should reject invalid id"
             exit 1
           fi
 
@@ -183,17 +190,19 @@ jobs:
               on_failure: block
               checks: [compile_check]
           EOF
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-runner.sh --change ci-feat --gate D
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
+          pl run --change ci-feat --gate D
+          pl trace use \
             --change ci-feat --kind skill --id react-server-components \
             --phase IMPLEMENT --by "agent:ci"
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+          pl trace use \
             --change ci-feat --kind capability --id typecheck \
             --phase VERIFY --by "agent:ci"
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-aggregate.sh
+          pl contract aggregate
           test -f "$PROJ/pl/contracts/ci-feat.consumed.yaml"
           test -f "$PROJ/pl/contracts/_registry.yaml"
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-verify.sh
+          pl contract verify
           echo "✅ scenario 1 OK"
 
       - name: Scenario 2 · broken pact (verify must exit 1)
@@ -223,8 +232,10 @@ jobs:
                 first_seen: "2026-04-23T18:00:00Z"
                 last_seen: "2026-04-23T18:00:00Z"
           EOF
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
           set +e
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-verify.sh
+          pl contract verify
           rc=$?
           set -e
           if [[ $rc -ne 1 ]]; then
@@ -260,13 +271,15 @@ jobs:
               on_failure: block
               checks: [compile_check]
           EOF
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-runner.sh --change ci-idem --gate D
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
+          pl run --change ci-idem --gate D
+          pl trace use \
             --change ci-idem --kind skill --id react-server-components \
             --phase IMPLEMENT --by "agent:ci"
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-aggregate.sh
+          pl contract aggregate
           set +e
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-contract-aggregate.sh --check
+          pl contract aggregate --check
           rc=$?
           set -e
           if [[ $rc -ne 0 ]]; then
@@ -305,15 +318,17 @@ jobs:
               criteria:
                 - "知识沉淀完成"
           EOF
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
           # 先打一个 adapter.use 事件，让 aggregate 有东西可聚
-          PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/trace-adapter-use.sh \
+          pl trace use \
             --change ci-criteria --kind skill --id react-server-components \
             --phase ARCHIVE --by "agent:ci"
           # 触发 criteria-only gate G。期望：
           #   1. gate 通过（exit 0）
           #   2. auto-aggregate 自动跑（不被 ITEMS_COUNT==0 早出绕过）
           #   3. pl/contracts/ 出现 pact + registry
-          OUT=$(PL_HOME="$PWD" PL_PROJECT="$PROJ" bash scripts/pl-runner.sh --change ci-criteria --gate G)
+          OUT=$(pl run --change ci-criteria --gate G)
           echo "$OUT"
           if ! echo "$OUT" | grep -q "auto: pl-contract-aggregate"; then
             echo "::error::criteria-only gate did NOT trigger auto-aggregate (regression of A1 bug)"

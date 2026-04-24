@@ -157,13 +157,13 @@ prompt: |
 
 ### VERIFY 阶段（脚本）
 ```bash
-bash $PL_HOME/scripts/pl-runner.sh --change {change_id} --gate D
+pl run --change {change_id} --gate D
 ```
 读取输出，更新 `.state.md` 的 Self-Check Results。
 
 ### SMOKE 阶段（脚本）
 ```bash
-bash $PL_HOME/scripts/pl-smoke.sh --change {change_id}
+pl smoke --change {change_id}
 ```
 
 ### OBSERVE 阶段
@@ -315,7 +315,7 @@ v1.7 把这"另一半"补全成了完整的双向闭环：
 每次发生上面动作，**接着调用一次**：
 
 ```bash
-bash $PL_HOME/scripts/trace-adapter-use.sh \
+pl trace use \
   --change {change_id} \
   --kind <skill|rule|template|agent|build_command|capability> \
   --id <asset_id> \
@@ -334,11 +334,11 @@ bash $PL_HOME/scripts/trace-adapter-use.sh \
 
 | 时机 | 命令 | 谁跑 |
 |---|---|---|
-| ARCHIVE 阶段或 PR 提交前 | `bash $PL_HOME/scripts/pl-contract-aggregate.sh` | 自动（pipeline-master） |
-| ARCHIVE 阶段或 PR 提交前 | `bash $PL_HOME/scripts/pl-contract-aggregate.sh --check` | CI 拦截"忘了 commit pact"的 PR |
-| adapter PR 上 | `bash $PL_HOME/scripts/pl-contract-verify.sh --strict` | CI 拦截 breaking 升级 |
-| 平时调试 | `bash $PL_HOME/scripts/pl-contract-verify.sh --change <id>` | 人 |
-| adapter 砍能力前 / consumer 升级前 | `bash $PL_HOME/scripts/pl-contract-query.sh --capability <id>` | 人（决策前的事实查询，v1.7.1+） |
+| ARCHIVE 阶段或 PR 提交前 | `pl contract aggregate` | 自动（pipeline-master） |
+| ARCHIVE 阶段或 PR 提交前 | `pl contract aggregate --check` | CI 拦截"忘了 commit pact"的 PR |
+| adapter PR 上 | `pl contract verify --strict` | CI 拦截 breaking 升级 |
+| 平时调试 | `pl contract verify --change <id>` | 人 |
+| adapter 砍能力前 / consumer 升级前 | `pl contract query --capability <id>` | 人（决策前的事实查询，v1.7.1+） |
 
 `pl/contracts/*.yaml` **应当 commit 进 git**——它是事实账本，不是中间产物。
 diff 即可读、可 review。
@@ -369,7 +369,7 @@ gh run list --commit $(git rev-parse HEAD) --limit 1
 
 当用户问状态时：
 ```bash
-bash $PL_HOME/scripts/pl-status.sh --change {change_id}
+pl status {change_id}
 ```
 并用自然语言总结当前进度（阶段 / 任务 / gate / 阻塞）。
 

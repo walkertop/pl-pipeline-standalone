@@ -42,6 +42,72 @@
 > （pl-pipeline.dev / discord / twitter / your-org Roadmap）+ 重写 v2.0 愿景段
 > （不再画饼，承诺转 issue）+ "alpha 阶段" → "stable, dogfooded"，
 > 顺手修 `pl-status.sh: dirs[@]: unbound variable` 旧 bug（bash 3.2 + set -u 兼容）。
+>
+> 🍴 **2026-04-24 v1.8.2**：自吃狗粮——把 agent prompt / 用户文档 / CI workflow 全部
+> 切成 `pl <subcmd>` 风格，让 v1.8 CLI 真正成为 first-class citizen 而非"装饰"。
+> 19 个文件、120 行变更。`adapter-create` 输出的 "next steps" / 各 adapter README /
+> dashboard 文档 / FAQ / MVP_STATUS / agent prompt 全部统一。
+> MIGRATION.md 加头部 note 不全文改（保留历史快照）。
+
+---
+
+## [1.8.2] — 2026-04-24 · 自吃狗粮：全面切到 pl CLI 🍴
+
+### 背景
+
+v1.8.0 收口 CLI 后存在严重的"使用一致性债"：
+agent prompt 还在告诉 agent 用 `bash $PL_HOME/scripts/...`、各 README 一直写老路径、
+CI workflow 也是 `bash scripts/...`。CLI 摆在那里却没人用 = 摆设。
+
+本里程碑全面把"应该改"的地方切到新 CLI，让 v1.8 真正成为 first-class citizen。
+
+### 改动范围（19 个文件，120/89 行）
+
+**Agent prompt（让 agent 用新 CLI）**
+- `assets/pl/agents/pipeline-master.md` 9 处 → `pl run` / `pl smoke` / `pl trace use` / `pl contract aggregate|verify|query` / `pl status`
+- `assets/pl/rules/acceptance-criteria.md` → `pl rule-scan`
+- `assets/pl/rules/build-verification.md` → `pl run --check build` / `pl should-build`
+- `assets/adapter-sdk/docs/adapter-authoring-guide.md` → `pl adapter create`
+
+**用户文档**
+- `docs/dashboard-guide.md` 8 处 → `pl dashboard ...`（含 30 秒上手 / 三种姿势 / FAQ / 调试）
+- `docs/guides/adapter-authoring.md` 6 处 → `pl adapter install/validate` / `pl contract aggregate|verify|query`
+- `dashboard/README.md` 2 处 → `pl dashboard ...`
+- `dashboard/index.html` empty state → `pl observe --change`
+- `FAQ.md` 3 处 → `pl adapter install/create`
+- `MVP_STATUS.md` 6 处 → 全部 pl + 推荐 PATH 方式
+- `MIGRATION.md` 头部加 v1.8+ note，指向 `docs/cli-reference.md`（保留历史快照不全改）
+
+**Adapter 文档**
+- `adapters/adapter-nextjs-web/{README.md,docs/case-study.md}`
+- `adapters/adapter-python-fastapi/{README.md,docs/case-study.md}`
+- `adapters/adapter-kotlin/README.md`
+- 全部 → `pl adapter install/validate`
+
+**CI workflow（让 CI 用新 CLI 验证 CLI 自己）**
+- `.github/workflows/ci.yml` 17 处 `bash scripts/...` → `pl <subcmd>`
+- 每个 step 头部加 `export PATH="$PWD/bin:$PATH"`
+- 包括：pl-core self-check / adapter validate&install&create / CDC scenario 1-4
+
+**脚本输出**
+- `scripts/adapter-create.sh` 生成的 README 模板 + "Next steps" 输出 5 处全切
+- `scripts/trace-adapter-use.sh` 注释里的 usage 示例
+
+### 不动的部分
+
+- `CHANGELOG.md` / `README.md`：合法引用"老路径仍兼容"
+- `docs/retros/*` / `docs/milestones/*` / `docs/migration/v1.4-to-v1.5.md`：历史快照
+- `docs/cli-reference.md`：在讲 CLI 与脚本等价性，必须出现两种形式
+- `assets/pl/config.default.yaml` 引用不存在的 `check-spec-complete.sh` / `check-taskdag.sh`：
+  另一个长期债（脚本本身缺失），不在本里程碑范围
+
+### 验证
+
+本地预演了全部 CI scenario：
+- pl status / pl adapter validate / pl adapter create
+- CDC scenario 1（happy path：trace use → aggregate → verify → satisfied）
+- Scenario 4（criteria-only ARCHIVE 自动 aggregate）
+全部绿。
 
 ---
 

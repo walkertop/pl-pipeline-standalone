@@ -22,7 +22,7 @@
 #   --note     可选附加说明（写入 data.note）
 #
 # 示例（agent 在 IMPLEMENT 阶段调用 react-server-components skill 后）:
-#   bash $PL_HOME/scripts/trace-adapter-use.sh \
+#   pl trace use \
 #     --change add-user-login \
 #     --kind skill \
 #     --id react-server-components \

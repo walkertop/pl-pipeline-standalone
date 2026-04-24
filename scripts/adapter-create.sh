@@ -272,7 +272,7 @@ mkdir -p pl/{changes,templates} .codebuddy/{agents,skills,rules} scripts
 cp \$PL_ASSETS/pl/config.default.yaml pl/config.yaml
 
 # 安装本 adapter
-bash \$PL_HOME/scripts/adapter-install.sh \\
+pl adapter install \\
   \$PL_HOME/adapters/adapter-$ADAPTER_ID \\
   .
 \`\`\`
@@ -290,7 +290,7 @@ bash \$PL_HOME/scripts/adapter-install.sh \\
 ## 校验
 
 \`\`\`bash
-bash \$PL_HOME/scripts/adapter-validate.sh \$PL_HOME/adapters/adapter-$ADAPTER_ID
+pl adapter validate \$PL_HOME/adapters/adapter-$ADAPTER_ID
 \`\`\`
 
 ## 案例
@@ -427,7 +427,7 @@ if bash "$(dirname "${BASH_SOURCE[0]}")/adapter-validate.sh" "$DEST" >/dev/null 
   log_ok "adapter-validate passed"
 else
   log_warn "adapter-validate reports issues (expected for --full stubs)"
-  log_info "  run: bash \$PL_HOME/scripts/adapter-validate.sh $DEST"
+  log_info "  run: pl adapter validate $DEST"
 fi
 
 # ---- 总结 ----
@@ -449,10 +449,10 @@ cat <<EOF
      - 为 build/verify/lint 编写 ${DIM}scripts/*.sh${NC}
 
   4. 校验
-     ${BOLD}bash \$PL_HOME/scripts/adapter-validate.sh $DEST${NC}
+     ${BOLD}pl adapter validate $DEST${NC}
 
   5. 在空项目试装
-     ${BOLD}bash \$PL_HOME/scripts/adapter-install.sh --dry-run $DEST <target-project>${NC}
+     ${BOLD}pl adapter install --dry-run $DEST <target-project>${NC}
 
   6. 写 docs/case-study.md 用真实工程跑一次端到端
 EOF

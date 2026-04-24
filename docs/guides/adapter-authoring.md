@@ -405,7 +405,7 @@ cd /path/to/user-project
 cp $PL_ASSETS/pl/config.default.yaml pl/config.yaml
 
 # 安装 adapter
-bash $PL_HOME/scripts/adapter-install.sh \
+pl adapter install \
   $PL_HOME/adapters/adapter-<your-stack> \
   .
 ```
@@ -424,7 +424,7 @@ scripts/adapter-<stack>-{build,verify,lint}.sh ← 复制 scripts
 发布前务必通过：
 
 ```bash
-bash $PL_HOME/scripts/adapter-validate.sh $PL_HOME/adapters/adapter-<your-stack>
+pl adapter validate $PL_HOME/adapters/adapter-<your-stack>
 ```
 
 校验项：
@@ -557,14 +557,16 @@ jobs:
       # 1. 检查 pact 是否最新（漏 commit pact 会失败）
       - name: pact freshness check
         run: |
-          PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD" \
-            bash $PL_HOME/scripts/pl-contract-aggregate.sh --check
+          export PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD"
+          export PATH="$PL_HOME/bin:$PATH"
+          pl contract aggregate --check
 
       # 2. 拿 pact 对账当前 adapter（adapter PR 升级时会拦）
       - name: contract verify --strict
         run: |
-          PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD" \
-            bash $PL_HOME/scripts/pl-contract-verify.sh --strict
+          export PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD"
+          export PATH="$PL_HOME/bin:$PATH"
+          pl contract verify --strict
 ```
 
 ### 12.2 adapter 仓库侧 CI snippet（你自己的 adapter PR 拦截）
@@ -603,9 +605,9 @@ jobs:
       - name: verify against consumer ${{ matrix.consumer }}
         run: |
           # 假设 pl-pipeline 也是 consumer 的 submodule
-          PL_HOME="$PWD/consumer/vendor/pl-pipeline" \
-          PL_PROJECT="$PWD/consumer" \
-            bash $PL_HOME/scripts/pl-contract-verify.sh --strict
+          export PL_HOME="$PWD/consumer/vendor/pl-pipeline" PL_PROJECT="$PWD/consumer"
+          export PATH="$PL_HOME/bin:$PATH"
+          pl contract verify --strict
 ```
 
 ### 12.3 退出码语义
@@ -700,8 +702,9 @@ $ pl-contract-query.sh --capability typecheck --json
 **adapter 作者「我想删 skill X」**：
 ```bash
 # 在 adapter 仓库里（vendor 一份 pl-pipeline，或 submodule）
-PL_HOME=$PWD/vendor/pl-pipeline PL_PROJECT=$PWD/examples/some-consumer \
-  bash $PL_HOME/scripts/pl-contract-query.sh --skill X
+export PL_HOME=$PWD/vendor/pl-pipeline PL_PROJECT=$PWD/examples/some-consumer
+export PATH="$PL_HOME/bin:$PATH"
+pl contract query --skill X
 # 0 hits → 安全删；>0 hits → 先发 capability 抽象 + deprecated_in
 ```
 

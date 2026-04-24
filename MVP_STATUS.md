@@ -139,6 +139,7 @@ pl-pipeline-standalone/
 
 ```bash
 export PL_HOME="/path/to/pl-pipeline-standalone"
+export PATH="$PL_HOME/bin:$PATH"   # 启用 pl CLI（一次性）
 cd your-project
 
 # 初始化 pl 结构
@@ -146,30 +147,33 @@ mkdir -p pl/{changes,templates} .codebuddy/{agents,skills,rules} scripts
 cp $PL_HOME/assets/pl/config.default.yaml pl/config.yaml
 
 # 按技术栈装 adapter（Next.js 为例）
-bash $PL_HOME/scripts/adapter-install.sh $PL_HOME/adapters/adapter-nextjs-web .
+pl adapter install $PL_HOME/adapters/adapter-nextjs-web .
 
 # 导出 adapter 注入的构建命令
 export PL_BUILD_CHECK_CMD="npx tsc --noEmit"
 
 # 查状态
-bash $PL_HOME/scripts/pl-status.sh
+pl status
 ```
 
-### 方式 2：alias
+### 方式 2：PATH（推荐）
 
 ```bash
 # ~/.zshrc
 export PL_HOME="/path/to/pl-pipeline-standalone"
-alias pl-status="bash $PL_HOME/scripts/pl-status.sh"
-alias pl-install-adapter="bash $PL_HOME/scripts/adapter-install.sh"
-alias pl-create-adapter="bash $PL_HOME/scripts/adapter-create.sh"
+export PATH="$PL_HOME/bin:$PATH"
+
+# 之后所有命令都直接 pl <subcmd>
+pl status
+pl adapter install ...
+pl adapter create my-stack
 ```
 
 ### 方式 3：新技术栈
 
 ```bash
 # 5 分钟创建你自己的 adapter 骨架
-bash $PL_HOME/scripts/adapter-create.sh rust-axum --full
+pl adapter create rust-axum --full
 # → adapters/adapter-rust-axum/ 骨架就绪
 # 按 authoring-guide.md 填内容
 ```

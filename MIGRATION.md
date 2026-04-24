@@ -2,6 +2,12 @@
 
 本文档指导你把 **v1.0 时代的 pl-pipeline 项目** 升级到 **v1.2.0**（retro-v2 收官版）。
 
+> 📌 **v1.8+ 提示**：本文档保留 v1.2 时期的 `bash $PL_HOME/scripts/<x>.sh ...` 调用风格作为
+> 历史快照。**v1.8.0 起所有这些命令都有等价的 `pl <subcmd>` 形式**，
+> 一一对应见 [`docs/cli-reference.md`](./docs/cli-reference.md)。
+> 如果你是新读者：先 `export PATH="$PL_HOME/bin:$PATH"`，然后把下文每条
+> `bash $PL_HOME/scripts/pl-runner.sh ...` 心理替换成 `pl run ...`。
+
 ---
 
 ## TL;DR

@@ -20,8 +20,8 @@ cd /path/to/my-fastapi-project
 mkdir -p pl/{changes,templates} .codebuddy/{agents,skills,rules} scripts
 cp $PL_ASSETS/pl/config.default.yaml pl/config.yaml
 
-# 装 adapter
-bash $PL_HOME/scripts/adapter-install.sh \
+# 装 adapter（需先 export PATH="$PL_HOME/bin:$PATH" 启用 pl CLI）
+pl adapter install \
   $PL_HOME/adapters/adapter-python-fastapi \
   .
 
@@ -55,7 +55,7 @@ scripts/adapter-python-fastapi-{build,verify,lint}.sh
 ## 校验
 
 ```bash
-bash $PL_HOME/scripts/adapter-validate.sh $PL_HOME/adapters/adapter-python-fastapi
+pl adapter validate $PL_HOME/adapters/adapter-python-fastapi
 ```
 
 ## 案例

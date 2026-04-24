@@ -339,17 +339,17 @@ piao_emit:
 
 ```bash
 # 最小骨架（只含 templates 和占位 adapter.yaml）
-bash $PL_HOME/scripts/adapter-create.sh my-stack
+pl adapter create my-stack
 
 # 完整骨架（含 agents/skills/rules/scripts 占位文件，adapter.yaml 的
 # provides 全部启用）
-bash $PL_HOME/scripts/adapter-create.sh my-stack --full
+pl adapter create my-stack --full
 
 # 强制覆盖已存在目录
-bash $PL_HOME/scripts/adapter-create.sh my-stack --full --force
+pl adapter create my-stack --full --force
 
 # 自定义输出位置
-bash $PL_HOME/scripts/adapter-create.sh my-stack --dest /tmp/sandbox
+pl adapter create my-stack --dest /tmp/sandbox
 ```
 
 自检：脚手架生成后会**自动调用** `adapter-validate.sh` 做一次静态检查。
