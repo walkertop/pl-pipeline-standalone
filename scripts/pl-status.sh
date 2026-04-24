@@ -230,6 +230,10 @@ collect_raw() {
     while IFS= read -r d; do dirs+=("$d"); done < <(discover_changes)
   fi
 
+  # bash 3.2 + set -u: 空数组 "${dirs[@]}" 会报 unbound; 用 +alt 兜底
+  if [[ ${#dirs[@]} -eq 0 ]]; then
+    return 0
+  fi
   local first=1
   for d in "${dirs[@]}"; do
     if [[ $first -eq 0 ]]; then

@@ -386,6 +386,16 @@ run_check() {
     --arg reason "$reason" --argjson dur "$duration" \
     '{checker:$id,cmd:$cmd,status:$status,duration_sec:$dur} + (if $reason != "" then {reason:$reason} else {} end)')"
 
+  # consumer→adapter 使用证据：若原始 cmd 引用了 adapter 注入的 ${PL_*} env，
+  # 就记一条 adapter.use 事件（仅观测，不阻塞）。后续 broker 脚本可聚合产 consumer pact。
+  local consumed_env
+  consumed_env=$(echo "$raw_cmd" | grep -oE '\$\{PL_[A-Z0-9_]+(:-[^}]*)?\}' | sed -E 's/\$\{([A-Z0-9_]+).*/\1/' | sort -u | tr '\n' ',' | sed 's/,$//')
+  if [[ -n "$consumed_env" ]]; then
+    trace_adapter_use "build_command" "$id" "$(jq -nc \
+      --arg env "$consumed_env" --arg cmd "$cmd" --arg status "$status" \
+      '{via_env:$env, cmd:$cmd, status:$status}')"
+  fi
+
   if [[ "$status" == "pass" ]]; then
     return 0
   else
@@ -414,19 +424,40 @@ GATE_EVAL=$(echo "$RESOLVED" | python3 -c 'import json,sys;print(json.load(sys.s
 GATE_ON_FAILURE=$(echo "$RESOLVED" | python3 -c 'import json,sys;print(json.load(sys.stdin)["gate"].get("on_failure","block"))')
 
 trace_init "$CHANGE" "$GATE_FROM" "script:pl-runner"
-trace_emit "gate.start" "$(jq -nc --arg id "$GATE" --arg from "$GATE_FROM" --arg to "$GATE_TO" \
-  '{gate:$id,from:$from,to:$to}')"
+trace_gate_start "$GATE" "$(jq -nc --arg from "$GATE_FROM" --arg to "$GATE_TO" \
+  '{from:$from,to:$to}')"
 
 echo "${BOLD}━━━ Gate $GATE ━━━${NC}"
 echo "  from: $GATE_FROM  →  to: $GATE_TO"
 echo "  eval: $GATE_EVAL"
 echo ""
 
+# v1.7：ARCHIVE 阶段自动聚合 consumer pact（CDC broker）。
+# 触发条件：gate 通过 + 此 gate 进入 ARCHIVE。
+# 失败不阻断 gate 结果，只 warn——观测层不可成为流水线的故障源。
+# 注意：必须同时覆盖正常路径 和 ITEMS_COUNT==0 早出路径（criteria-only gate，常见于
+# v1 兼容的 ARCHIVE gate 如 demo-nextjs-todo 的 gate G）。
+maybe_run_archive_aggregate() {
+  local gate_result="$1"
+  if [[ "$gate_result" == "passed" && "$GATE_TO" == "ARCHIVE" ]]; then
+    local agg_script="$PL_HOME/scripts/pl-contract-aggregate.sh"
+    if [[ -x "$agg_script" ]]; then
+      echo ""
+      echo "${DIM}─── auto: pl-contract-aggregate --change $CHANGE ───${NC}"
+      if "$agg_script" --change "$CHANGE" 2>&1 | sed 's/^/  /'; then
+        echo "  ${DIM}(remember to: git add pl/contracts/${CHANGE}.consumed.yaml pl/contracts/_registry.yaml)${NC}"
+      else
+        log_warn "auto-aggregate failed (non-blocking); run manually: $agg_script --change $CHANGE"
+      fi
+    fi
+  fi
+}
+
 ITEMS_COUNT=$(echo "$RESOLVED" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["items"]))')
 if [[ "$ITEMS_COUNT" -eq 0 ]]; then
   log_warn "gate '$GATE' has no checks defined (v1 criteria only)"
-  trace_emit "gate.eval" "$(jq -nc --arg id "$GATE" \
-    '{gate:$id,result:"passed",reason:"no_checks_defined"}')"
+  trace_gate_end "$GATE" "passed" '{"reason":"no_checks_defined"}'
+  maybe_run_archive_aggregate "passed"
   if $JSON_OUT; then
     jq -nc --arg gate "$GATE" '{gate:$gate,result:"passed",checks:[],note:"v1 criteria only, no machine checks"}'
   fi
@@ -473,10 +504,11 @@ elif [[ "$GATE_RESULT" == "blocked" && "$GATE_ON_FAILURE" == "skip" ]]; then
   GATE_RESULT="skipped"
 fi
 
-trace_emit "gate.eval" "$(jq -nc \
-  --arg id "$GATE" --arg result "$GATE_RESULT" --arg eval "$GATE_EVAL" \
+trace_gate_end "$GATE" "$GATE_RESULT" "$(jq -nc --arg eval "$GATE_EVAL" \
   --argjson pass "$PASS" --argjson fail "$FAIL" --argjson skip "$SKIP" \
-  '{gate:$id,result:$result,eval:$eval,pass:$pass,fail:$fail,skip:$skip}')"
+  '{eval:$eval,pass:$pass,fail:$fail,skip:$skip}')"
+
+maybe_run_archive_aggregate "$GATE_RESULT"
 
 echo ""
 echo "${BOLD}━━━ Summary ━━━${NC}"

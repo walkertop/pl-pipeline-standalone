@@ -30,6 +30,9 @@
 
   <div class="stage-row" id="stage-row"></div>
 
+  <!-- v1.7.3: Contract drill-down 卡片，端点不可用或本 change 没 pact 时整个不渲染 -->
+  <section id="contract-section" style="display:none; margin: 24px 0 8px 0;"></section>
+
   <div class="timeline-head">
     <h2>Timeline <span class="muted" id="event-count"></span></h2>
     <div class="timeline-filter">
@@ -107,6 +110,209 @@ function renderInfoCards(agg) {
       <div class="info-value">${agg.total_events}</div>
     </div>
   `;
+}
+
+// ─── v1.7.3: Contract drill-down 渲染 ───────────────────────────────
+let contractDetail = null;       // 最近一次 fetch 的完整 detail 报告
+let contractCopyTimers = {};      // 复制按钮反馈用的 setTimeout 句柄
+
+async function refreshContractDetail() {
+  try {
+    const url = `/_data/contract-detail.json?change=${encodeURIComponent(changeId)}`;
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) { contractDetail = null; return; }
+    contractDetail = await resp.json();
+  } catch {
+    contractDetail = null;
+  }
+}
+
+function statusBadgeContract(status) {
+  if (status === 'broken')   return '<span class="badge badge-red">✗ broken</span>';
+  if (status === 'warn')     return '<span class="badge badge-yellow">! warn</span>';
+  if (status === 'satisfied')return '<span class="badge badge-green">✓ satisfied</span>';
+  return `<span class="badge badge-gray">${status || 'unknown'}</span>`;
+}
+
+function escapeHTML(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function copyToClipboard(text, buttonId) {
+  // 双层 fallback：
+  //   1) 优先 navigator.clipboard.writeText（HTTPS / 现代浏览器 + focused document）
+  //   2) reject 或 unavailable → 退到 execCommand('copy') + 隐藏 textarea（headless / 旧浏览器）
+  function execFallback() {
+    return new Promise((res, rej) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed'; ta.style.left = '-9999px'; ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        ok ? res() : rej(new Error('execCommand copy returned false'));
+      } catch (e) { rej(e); }
+    });
+  }
+  const primary = (navigator.clipboard && navigator.clipboard.writeText)
+    ? navigator.clipboard.writeText(text)
+    : Promise.reject(new Error('clipboard API unavailable'));
+  primary
+    .catch(() => execFallback())
+    .then(() => flashCopied(buttonId, '✓ copied'))
+    .catch(() => flashCopied(buttonId, '✗ copy failed'));
+}
+function flashCopied(buttonId, msg) {
+  const btn = document.getElementById(buttonId);
+  if (!btn) return;
+  if (!btn.dataset.origText) btn.dataset.origText = btn.textContent;
+  btn.textContent = msg;
+  btn.dataset.copied = '1';
+  if (contractCopyTimers[buttonId]) clearTimeout(contractCopyTimers[buttonId]);
+  contractCopyTimers[buttonId] = setTimeout(() => {
+    btn.textContent = btn.dataset.origText;
+    delete btn.dataset.copied;
+  }, 1400);
+}
+window.copyToClipboard = copyToClipboard;
+
+function rowsHTML(items, severity) {
+  // severity: 'error' | 'warn' | 'ok'
+  if (!items || items.length === 0) return '';
+  const cls = severity === 'error' ? 'badge-red' : (severity === 'warn' ? 'badge-yellow' : 'badge-gray');
+  return items.map((it, i) => {
+    const reason = it.reason ? `<div class="muted" style="font-size:12px; margin-top:4px; line-height:1.4">${escapeHTML(it.reason)}</div>` : '';
+    const path = it.source_path || '';
+    let pathBtn = '';
+    if (path) {
+      const btnId = `cp-${severity}-${i}-${Math.random().toString(36).slice(2,8)}`;
+      pathBtn = `
+        <button id="${btnId}"
+          onclick="event.stopPropagation(); copyToClipboard('${escapeHTML(path)}', '${btnId}')"
+          title="${escapeHTML(path)}"
+          style="background: var(--bg-alt); border: 1px solid var(--border); color: var(--text-muted); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; white-space: nowrap;">
+          📋 copy path
+        </button>`;
+    }
+    return `
+      <tr>
+        <td style="padding:8px 10px; border-bottom: 1px solid var(--border);"><span class="badge ${cls}">${escapeHTML(it.kind || '?')}</span></td>
+        <td style="padding:8px 10px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 12px;">${escapeHTML(it.id || '?')}${reason}</td>
+        <td style="padding:8px 10px; border-bottom: 1px solid var(--border); text-align: right;">${pathBtn}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderContractSection() {
+  const sec = document.getElementById('contract-section');
+  if (!sec) return;
+
+  // 端点不可用 / 本 change 没 pact → 整个区块不渲染
+  if (!contractDetail || !contractDetail.available) {
+    sec.style.display = 'none';
+    sec.innerHTML = '';
+    return;
+  }
+
+  const d = contractDetail;
+  const adapter = d.adapter || '?';
+  const ver = d.adapter_version ? `@${d.adapter_version}` : '';
+
+  // 顶部头：状态 + adapter + 全局 copy adapter.yaml 按钮
+  const adapterBtnId = 'cp-adapter-' + Math.random().toString(36).slice(2,8);
+  let adapterBtn = '';
+  if (d.adapter_path) {
+    adapterBtn = `<button id="${adapterBtnId}"
+      onclick="copyToClipboard('${escapeHTML(d.adapter_path)}', '${adapterBtnId}')"
+      title="${escapeHTML(d.adapter_path)}"
+      style="background: var(--bg-alt); border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 11px;">
+      📋 copy adapter.yaml path
+    </button>`;
+  }
+
+  // 三段：violations / warnings / satisfied (后者默认折叠)
+  const vRows = rowsHTML(d.violations, 'error');
+  const wRows = rowsHTML(d.warnings, 'warn');
+  const sRows = rowsHTML(d.satisfied, 'ok');
+
+  // 折叠满足项以免淹没违规
+  const sCount = (d.satisfied || []).length;
+  const satisfiedBlock = sCount > 0 ? `
+    <details style="margin-top: 16px;">
+      <summary style="cursor: pointer; color: var(--text-muted); font-size: 13px; padding: 6px 0;">
+        ✓ ${sCount} satisfied (展开查看)
+      </summary>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+        <thead>
+          <tr style="text-align:left; color: var(--text-muted); font-size: 12px;">
+            <th style="padding:6px 10px; border-bottom: 1px solid var(--border); width: 110px;">kind</th>
+            <th style="padding:6px 10px; border-bottom: 1px solid var(--border);">id</th>
+            <th style="padding:6px 10px; border-bottom: 1px solid var(--border); width: 130px;"></th>
+          </tr>
+        </thead>
+        <tbody>${sRows}</tbody>
+      </table>
+    </details>
+  ` : '';
+
+  const violatedBlock = (d.violations && d.violations.length > 0) ? `
+    <h3 style="margin: 18px 0 8px 0; font-size: 14px;">✗ Broken (${d.summary.violations})</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="text-align:left; color: var(--text-muted); font-size: 12px;">
+          <th style="padding:6px 10px; border-bottom: 1px solid var(--border); width: 110px;">kind</th>
+          <th style="padding:6px 10px; border-bottom: 1px solid var(--border);">id / reason</th>
+          <th style="padding:6px 10px; border-bottom: 1px solid var(--border); width: 130px;"></th>
+        </tr>
+      </thead>
+      <tbody>${vRows}</tbody>
+    </table>
+  ` : '';
+
+  const warnedBlock = (d.warnings && d.warnings.length > 0) ? `
+    <h3 style="margin: 18px 0 8px 0; font-size: 14px;">! Warnings (${d.summary.warnings})</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="text-align:left; color: var(--text-muted); font-size: 12px;">
+          <th style="padding:6px 10px; border-bottom: 1px solid var(--border); width: 110px;">kind</th>
+          <th style="padding:6px 10px; border-bottom: 1px solid var(--border);">id / reason</th>
+          <th style="padding:6px 10px; border-bottom: 1px solid var(--border); width: 130px;"></th>
+        </tr>
+      </thead>
+      <tbody>${wRows}</tbody>
+    </table>
+  ` : '';
+
+  sec.innerHTML = `
+    <a id="contract"></a>
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px;">
+      <div style="display:flex; align-items:center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display:flex; align-items:center; gap: 10px;">
+          <h2 style="margin: 0; font-size: 16px;">Contract</h2>
+          ${statusBadgeContract(d.status)}
+          <span class="muted" style="font-size: 13px;">vs ${escapeHTML(adapter)}${escapeHTML(ver)}</span>
+        </div>
+        ${adapterBtn}
+      </div>
+      <div style="color: var(--text-muted); font-size: 12px; margin-top: 6px;">
+        ${d.summary.violations} broken · ${d.summary.warnings} warn · ${d.summary.satisfied} satisfied
+      </div>
+      ${violatedBlock}
+      ${warnedBlock}
+      ${satisfiedBlock}
+    </div>
+  `;
+  sec.style.display = '';
+
+  // URL fragment 是 #contract → 自动滚到本卡片（首次进入或来自 index 的角标点击）
+  if (location.hash === '#contract') {
+    setTimeout(() => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }
 }
 
 function categorize(e) {
@@ -235,6 +441,10 @@ async function main() {
   document.getElementById('brand-meta').textContent = `/ ${changeId}`;
   setupFilters();
 
+  // 先抓一次 contract detail（独立失败：endpoint 不可用不影响 timeline）
+  await refreshContractDetail();
+  renderContractSection();
+
   // 先尝试 live reload
   liveMode = await probeLiveReload();
 
@@ -263,6 +473,8 @@ async function main() {
       onAppend: (events) => {
         prependNewEvents(events);
         refreshHeader();
+        // ARCHIVE auto-aggregate 通常会触发新 adapter.use 事件 → 顺便刷 contract
+        refreshContractDetail().then(renderContractSection);
       },
       onReset: () => {
         allEvents = [];

@@ -11,10 +11,11 @@
 ```bash
 # 在目标项目根目录
 export PL_HOME=/path/to/pl-pipeline-standalone
-bash $PL_HOME/scripts/pl-dashboard.sh --open
+export PATH="$PL_HOME/bin:$PATH"
+pl dashboard --open
 
 # 降级：关闭 live reload，使用纯静态托管（v1.3.0 行为）
-bash $PL_HOME/scripts/pl-dashboard.sh --static-only
+pl dashboard --static-only
 ```
 
 默认端口 8889，`--open` 自动打开浏览器。

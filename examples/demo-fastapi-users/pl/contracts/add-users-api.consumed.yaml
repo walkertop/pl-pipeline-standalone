@@ -1,0 +1,108 @@
+apiVersion: piao.dev/v1
+kind: ConsumerContract
+metadata:
+  change_id: add-users-api
+  generated_at: "2026-04-23T18:57:27Z"
+  generator: pl-contract-aggregate.sh@v1.7.0
+  source_files:
+    - pipeline-output/trace/add-users-api.events.jsonl
+  event_count: 14
+provider:
+  adapter: python-fastapi
+  versions_seen:
+    - 0.1.0
+consumed:
+  skills:
+    - id: fastapi-dependency-injection
+      uses: 1
+      first_seen: "2026-04-23T18:57:11Z"
+      last_seen: "2026-04-23T18:57:11Z"
+      phases:
+        - IMPLEMENT
+    - id: pydantic-v2-patterns
+      uses: 1
+      first_seen: "2026-04-23T18:57:11Z"
+      last_seen: "2026-04-23T18:57:11Z"
+      phases:
+        - IMPLEMENT
+    - id: pytest-async
+      uses: 1
+      first_seen: "2026-04-23T18:57:11Z"
+      last_seen: "2026-04-23T18:57:11Z"
+      phases:
+        - IMPLEMENT
+    - id: sqlalchemy-async
+      uses: 1
+      first_seen: "2026-04-23T18:57:11Z"
+      last_seen: "2026-04-23T18:57:11Z"
+      phases:
+        - IMPLEMENT
+  rules:
+    - id: api-error-handling
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - IMPLEMENT
+    - id: fastapi-conventions
+      uses: 1
+      first_seen: "2026-04-23T18:57:11Z"
+      last_seen: "2026-04-23T18:57:11Z"
+      phases:
+        - IMPLEMENT
+    - id: fastapi-depends-pass-callable
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - VERIFY
+    - id: fastapi-no-sync-blocking-in-async
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - VERIFY
+    - id: python-typing-strict
+      uses: 1
+      first_seen: "2026-04-23T18:57:11Z"
+      last_seen: "2026-04-23T18:57:11Z"
+      phases:
+        - IMPLEMENT
+  agents:
+    - id: fastapi-architect
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - PLAN
+    - id: fastapi-reviewer
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - VERIFY
+  build_commands:
+    - id: compile_check
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - VERIFY
+      pass: 0
+      fail: 0
+    - id: lint
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - VERIFY
+      pass: 0
+      fail: 0
+    - id: test
+      uses: 1
+      first_seen: "2026-04-23T18:57:12Z"
+      last_seen: "2026-04-23T18:57:12Z"
+      phases:
+        - VERIFY
+      pass: 0
+      fail: 0

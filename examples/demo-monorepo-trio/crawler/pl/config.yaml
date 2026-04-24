@@ -1,0 +1,255 @@
+# pl-pipeline Config
+# 项目自治研发流水线配置文件
+# schema: assets/pl/schemas/gate.schema.json（gates/checks 节）
+
+version: pl@v1.1
+namespace: pl
+
+# ----------------------------------------------------------------------------
+# 1. 阶段定义
+# ----------------------------------------------------------------------------
+stages:
+  - id: SPEC
+    name: "规格定义"
+    description: "把需求/旧代码/PRD 转成结构化规格"
+    owner_actor: "${SPEC_ACTOR:-agent:spec-author}"   # adapter 可覆盖
+    next_gate: A0
+
+  - id: PLAN
+    name: "任务规划"
+    description: "规格→可执行任务图，含组件复用分析"
+    owner_actor: "${PLAN_ACTOR:-agent:planner}"
+    next_gate: B1
+
+  - id: IMPLEMENT
+    name: "编码实现"
+    description: "按 TaskDAG 逐任务编码"
+    owner_actor: "${IMPLEMENT_ACTOR:-agent:coder}"
+    next_gate: D   # 内部有 C 门禁（任务全完成）→ D 门禁（验证前检查）
+
+  - id: VERIFY
+    name: "验证"
+    description: "编译 + 静态检查 + 运行时自检"
+    owner_actor: "${VERIFY_ACTOR:-script:pl-runner}"
+    next_gate: E
+
+  - id: SMOKE
+    name: "冷启动烟测"
+    description: "真实启动应用 + 打一发请求。E1/E2 新增阶段。"
+    owner_actor: "${SMOKE_ACTOR:-script:pl-smoke}"
+    next_gate: E_smoke
+
+  - id: OBSERVE
+    name: "观察"
+    description: "稳定运行观察、埋点验证、性能采集"
+    owner_actor: "${OBSERVE_ACTOR:-agent:guardian}"
+    next_gate: G   # 内部 F 门禁（无 P0 异常）→ G 门禁（归档前）
+
+  - id: ARCHIVE
+    name: "归档"
+    description: "知识沉淀、组件推广、change 关闭"
+    owner_actor: "${ARCHIVE_ACTOR:-agent:archiver}"
+    next_gate: null
+
+# ----------------------------------------------------------------------------
+# 2. Check 池（可被多个 gate 引用）
+# ----------------------------------------------------------------------------
+# Check 的 cmd 使用 ${ENV_VAR} 占位。pl-runner 在执行时按优先级解析变量：
+#   1. 宿主 .pl-adapter.yaml 的 build_adapter.env（adapter 填的）
+#   2. 调用 pl-runner 时的环境变量
+#   3. 本文件 default_cmd 兜底
+checks:
+  - id: compile
+    label: "编译 / 类型检查"
+    cmd: "${PL_BUILD_CHECK_CMD}"
+    timeout_sec: 180
+    required: false      # 若 adapter 未注入 PL_BUILD_CHECK_CMD 则跳过
+
+  - id: lint
+    label: "静态检查"
+    cmd: "${PL_LINT_CMD}"
+    timeout_sec: 120
+    required: false
+
+  - id: test
+    label: "单元测试"
+    cmd: "${PL_TEST_CMD}"
+    timeout_sec: 600
+    required: false
+
+  - id: spec_complete
+    label: "Spec 已定义且无阻塞问题"
+    cmd: "bash $PL_HOME/scripts/check-spec-complete.sh"
+    required: false
+
+  - id: taskdag_valid
+    label: "TaskDAG 存在且无环"
+    cmd: "bash $PL_HOME/scripts/check-taskdag.sh"
+    required: false
+
+# ----------------------------------------------------------------------------
+# 3. 门禁定义（v1.1 新增 checks + eval 机器可执行节；保留 criteria 向后兼容）
+# ----------------------------------------------------------------------------
+gates:
+  A0:
+    from: SPEC
+    to: PLAN
+    checks:
+      - spec_complete
+    eval: all_checks.pass
+    on_failure: block
+    # 兼容 v1：
+    criteria:
+      - "功能清单 (Feature List) 完整"
+      - "所有 BLOCKING 问题已解决"
+      - "接口依赖清单 (Data Dependencies) 明确"
+
+  B1:
+    from: PLAN
+    to: IMPLEMENT
+    checks:
+      - taskdag_valid
+    eval: all_checks.pass
+    on_failure: block
+    criteria:
+      - "TaskDAG 生成且无环"
+      - "组件复用分析完成"
+      - "工时预估合理（单任务 ≤ 4h）"
+
+  C:
+    from: IMPLEMENT
+    to: IMPLEMENT
+    type: internal
+    eval: all_checks.pass
+    on_failure: warn
+    criteria:
+      - "所有任务 DONE"
+
+  D:
+    from: IMPLEMENT
+    to: VERIFY
+    checks:
+      - compile
+      - lint
+    eval: all_checks.pass
+    on_failure: block
+    criteria:
+      - "compile PASS（来自 adapter 的 $PL_BUILD_CHECK_CMD）"
+      - "lint PASS（来自 adapter 的 $PL_LINT_CMD）"
+
+  E:
+    from: VERIFY
+    to: SMOKE
+    checks:
+      - test
+    eval: all_checks.pass
+    on_failure: block
+    criteria:
+      - "test PASS（来自 adapter 的 $PL_TEST_CMD）"
+
+  E_smoke:
+    from: SMOKE
+    to: OBSERVE
+    # E_smoke 的 checks 由 pl-smoke.sh 动态生成（一个 check.run 对应一个 probe）
+    # eval 仍是 all_checks.pass
+    eval: all_checks.pass
+    on_failure: block
+    criteria:
+      - "应用可正常冷启动（smoke.boot + smoke.ready）"
+      - "关键路径 probe 全部通过（来自 adapter 的 build_adapter.smoke.probes）"
+
+  F:
+    from: OBSERVE
+    to: OBSERVE
+    type: internal
+    eval: all_checks.pass
+    on_failure: warn
+    criteria:
+      - "无 P0 异常（连续观察 N 天）"
+      - "性能达标"
+
+  G:
+    from: OBSERVE
+    to: ARCHIVE
+    eval: all_checks.pass
+    on_failure: block
+    criteria:
+      - "稳定运行 N 天（默认 3 天）"
+      - "知识沉淀完成（Skills/Rules/error-log 更新）"
+
+# ----------------------------------------------------------------------------
+# 4. 产物契约
+# ----------------------------------------------------------------------------
+artifacts:
+  required:
+    - spec.md         # StructuredSpec: What & Why
+    - plan.md         # Plan: How (架构决策、风险、里程碑)
+    - taskdag.md      # 任务 DAG
+    - api.md          # API Contract
+    - testmatrix.md   # 测试矩阵
+    - deps.md         # 依赖分析
+    - .state.md       # 阶段真相源
+
+  optional:
+    - proposal.md     # openspec 兼容入口
+    - design.md       # 高层决策摘要
+    - specs/**/*.md   # capability-level spec
+
+  schemas:
+    state:   assets/pl/schemas/state.schema.json
+    spec:    assets/pl/schemas/spec.schema.json
+    taskdag: assets/pl/schemas/taskdag.schema.json
+    plan:    assets/pl/schemas/plan.schema.json
+    gate:    assets/pl/schemas/gate.schema.json
+
+# ----------------------------------------------------------------------------
+# 5. 命令集
+# ----------------------------------------------------------------------------
+commands:
+  proposal:   "创建新 change（启动 SPEC 阶段）"
+  plan:       "规格→任务图（启动 PLAN 阶段）"
+  implement:  "按 TaskDAG 编码（启动 IMPLEMENT 阶段）"
+  apply:      "实施已批准变更（逐任务完成）"
+  verify:     "全链路验证（启动 VERIFY 阶段）"
+  smoke:      "冷启动烟测（启动 SMOKE 阶段，E1/E2 新增）"
+  archive:    "归档沉淀（启动 ARCHIVE 阶段）"
+  status:     "全局/单 change 状态查询"
+  migrate:    "全流程编排（proposal→archive 自动化）"
+  explore:    "探索模式（需求澄清/问题诊断）"
+
+# ----------------------------------------------------------------------------
+# 6. 脚本集（pl 命名空间）
+# ----------------------------------------------------------------------------
+scripts:
+  orchestrator:   scripts/pipeline-orchestrator.sh
+  runner:         scripts/pl-runner.sh           # E1 新增：通用 check 执行器
+  smoke:          scripts/pl-smoke.sh            # E2 新增：SMOKE 阶段驱动
+  state_generator: scripts/state-generator.sh
+  dashboard_gen:   scripts/pl-dashboard-refresh.sh
+  trace_emit:      scripts/trace-emit.sh
+  trace_report:    scripts/trace-report.sh
+
+# ----------------------------------------------------------------------------
+# 7. 观测体系
+# ----------------------------------------------------------------------------
+observability:
+  trace_dir:  pipeline-output/trace
+  dashboard:  pipeline-output/dashboard/index.html
+  reports_dir: pipeline-output/reports
+
+# ----------------------------------------------------------------------------
+# 8. 可选上游协议对接（默认关闭）
+# ----------------------------------------------------------------------------
+# pl-pipeline 的产物和事件可选择性地遵循一个更底层的 "artifact 契约协议"（URN /
+# sha256 / 事件流），用于多 adapter 生态和跨 change 审计。
+#
+# 对单人/单项目场景 **无需启用**，保持默认 false 即可。
+upstream_protocol:
+  enabled: false
+
+# ----------------------------------------------------------------------------
+# 9. 遗产兼容（可选）
+# ----------------------------------------------------------------------------
+legacy:
+  openspec_dir: openspec-legacy/
+  auto_migrate_script: scripts/pl-migrate-legacy.sh

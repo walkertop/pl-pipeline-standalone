@@ -21,8 +21,8 @@ cd /path/to/my-next-app
 cp $PL_ASSETS/pl/config.default.yaml pl/config.yaml
 mkdir -p .codebuddy/{agents,skills,rules} scripts pl/changes
 
-# 安装本 adapter
-bash $PL_HOME/scripts/adapter-install.sh \
+# 安装本 adapter（需先 export PATH="$PL_HOME/bin:$PATH" 启用 pl CLI）
+pl adapter install \
   $PL_HOME/adapters/adapter-nextjs-web \
   .
 
@@ -56,7 +56,7 @@ scripts/adapter-nextjs-web-{build,verify,lint}.sh
 ## 校验
 
 ```bash
-bash $PL_HOME/scripts/adapter-validate.sh $PL_HOME/adapters/adapter-nextjs-web
+pl adapter validate $PL_HOME/adapters/adapter-nextjs-web
 ```
 
 ## 案例

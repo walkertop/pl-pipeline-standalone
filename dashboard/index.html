@@ -25,13 +25,14 @@
   <h1 class="page-title">Changes</h1>
   <p class="page-sub">项目里所有变更（change）的当前状态。点击卡片查看完整 trace。</p>
 
+  <div id="contract-summary-slot"></div>
   <div id="grid" class="grid"></div>
 
   <div id="empty" class="empty" style="display:none">
     <div class="empty-icon">📭</div>
     <div>还没有 change 产出 events</div>
     <div class="muted" style="margin-top: 8px; font-size: 12px">
-      运行 <code>bash $PL_HOME/scripts/pl-observe.sh --change &lt;id&gt;</code> 开始观察
+      运行 <code>pl observe --change &lt;id&gt;</code> 开始观察
     </div>
   </div>
 </div>
@@ -48,6 +49,12 @@ const badge = mountStatusBadge(document.getElementById('live-badge-slot'));
 // change_id -> { tracePath, mtime, size, agg }
 const changeCache = new Map();
 
+// change_id -> { status, adapter, adapter_version, broken_count, warn_count, broken_examples, warn_examples }
+// 由 /_data/contracts.json 填充；端点不可用时为空对象（卡片就不显示 contract badge）
+let contractStatus = {};
+let contractSummary = null;     // { total, satisfied, warn, broken } 或 null
+let contractAvailable = false;
+
 async function loadIndex() {
   try {
     const resp = await fetch('./_data.json');
@@ -63,6 +70,24 @@ async function loadChangeEvents(tracePath) {
   if (!resp.ok) return [];
   const text = await resp.text();
   return parseJSONL(text);
+}
+
+// /_data/contracts.json 取每个 change 的 pact verify 状态
+// 端点 404 / 500 / 字段缺失都视为"不可用"，不影响其它视图
+async function refreshContractStatus() {
+  try {
+    const resp = await fetch('/_data/contracts.json', { cache: 'no-store' });
+    if (!resp.ok) {
+      contractStatus = {}; contractSummary = null; contractAvailable = false;
+      return;
+    }
+    const data = await resp.json();
+    contractAvailable = !!data.available;
+    contractStatus = data.by_change || {};
+    contractSummary = data.summary || null;
+  } catch {
+    contractStatus = {}; contractSummary = null; contractAvailable = false;
+  }
 }
 
 function renderStagePipeline(agg) {
@@ -85,13 +110,76 @@ function gateStatusBadge(status) {
   return '<span class="badge badge-blue">in progress</span>';
 }
 
+// 生成 contract pact 角标。无 pact / 端点不可用 → 返回空串（卡片就不挂 badge）
+// 有 pact → 一个小色块 + tooltip 列出 broken/warn 的前几条 + adapter@version
+// v1.7.3: 角标本身是按钮，点击直接跳到 change.html#contract drill-down
+function contractBadge(changeId) {
+  const info = contractStatus[changeId];
+  if (!info) return '';   // 该 change 还没产 pact
+  const adapter = info.adapter ? `${info.adapter}${info.adapter_version ? '@' + info.adapter_version : ''}` : '';
+  let cls, label, tip;
+  if (info.status === 'broken') {
+    cls = 'badge-red';
+    label = `pact ✗ ${info.broken_count}`;
+    tip = `pact broken (${info.broken_count} violation${info.broken_count === 1 ? '' : 's'}) against ${adapter}\nclick → drill-down`;
+    if (info.broken_examples && info.broken_examples.length) {
+      tip += '\n  • ' + info.broken_examples.join('\n  • ');
+      if (info.broken_count > info.broken_examples.length) tip += `\n  • … +${info.broken_count - info.broken_examples.length} more`;
+    }
+  } else if (info.status === 'warn') {
+    cls = 'badge-yellow';
+    label = `pact ! ${info.warn_count}`;
+    tip = `pact uses deprecated capability (${info.warn_count} warning${info.warn_count === 1 ? '' : 's'}) against ${adapter}\nclick → drill-down`;
+    if (info.warn_examples && info.warn_examples.length) {
+      tip += '\n  • ' + info.warn_examples.join('\n  • ');
+    }
+  } else {
+    cls = 'badge-green';
+    label = 'pact ✓';
+    tip = `pact satisfied against ${adapter}\nclick → drill-down`;
+  }
+  // 注意：badge 在 <a class="card"> 内部，需要 stopPropagation + preventDefault 把
+  // "drill-down 锚点跳转"和"卡片整体跳到 timeline"区分开
+  const drillUrl = `change.html?id=${encodeURIComponent(changeId)}#contract`;
+  const onclick = `event.stopPropagation(); event.preventDefault(); window.location.href='${drillUrl}'; return false;`;
+  return `<span class="badge ${cls}" role="button" tabindex="0" style="cursor:pointer;" `
+    + `onclick="${onclick}" title="${tip.replace(/"/g, '&quot;')}">${label}</span>`;
+}
+
+// 顶部 summary：N satisfied · M warn · K broken。可点击折叠，看哪些 broken。
+function renderContractSummary() {
+  const slot = document.getElementById('contract-summary-slot');
+  if (!slot) return;
+  if (!contractAvailable || !contractSummary || contractSummary.total === 0) {
+    slot.innerHTML = '';
+    return;
+  }
+  const { satisfied, warn, broken, total } = contractSummary;
+  const parts = [];
+  parts.push(`<span class="badge badge-green">✓ ${satisfied} satisfied</span>`);
+  if (warn > 0)   parts.push(`<span class="badge badge-yellow">! ${warn} warn</span>`);
+  if (broken > 0) parts.push(`<span class="badge badge-red">✗ ${broken} broken</span>`);
+  const dim = 'color: var(--text-muted); font-size: 13px;';
+  slot.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom: 18px;">
+      <span style="${dim}">CDC contracts</span>
+      ${parts.join(' ')}
+      <span style="${dim}">across ${total} change${total === 1 ? '' : 's'}</span>
+    </div>
+  `;
+}
+
 function cardHTML(agg) {
   const stageText = agg.stage;
+  const cBadge = contractBadge(agg.change_id);
   return `
     <a class="card" data-change="${agg.change_id}" href="change.html?id=${encodeURIComponent(agg.change_id)}" style="color:inherit; display:block;">
       <div class="card-head">
         <h3 class="card-title">${agg.change_id}</h3>
-        ${gateStatusBadge(agg.gate_status)}
+        <div style="display:flex; gap:6px; align-items:center;">
+          ${cBadge}
+          ${gateStatusBadge(agg.gate_status)}
+        </div>
       </div>
       <div class="card-stage">${stageText}</div>
 
@@ -155,6 +243,10 @@ async function fullRender() {
   const grid = document.getElementById('grid');
   const empty = document.getElementById('empty');
 
+  // 先把 contract 状态拉一次，这样首次渲染卡片时角标就在位
+  await refreshContractStatus();
+  renderContractSummary();
+
   if (!idx.changes || idx.changes.length === 0) {
     grid.innerHTML = '';
     empty.style.display = 'block';
@@ -203,6 +295,10 @@ async function main() {
           changeCache.delete(id);
         }
       }
+      // pact 可能在 ARCHIVE auto-aggregate 之后变化，跟 trace 索引绑在一起最简单
+      // server 端有 3s TTL 缓存，重复 fetch 几乎零成本
+      await refreshContractStatus();
+      renderContractSummary();
       // refresh 所有有变化的
       for (const c of changes) {
         const cached = changeCache.get(c.id);

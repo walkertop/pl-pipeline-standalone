@@ -93,6 +93,51 @@ provides:
     # 本 adapter 的 SMOKE 等价物由 full_build (next build) 承担——build 成功
     # = 产物可部署。未来版本会加 'next start' + HTTP probe 模式。
 
+  # v1.7 新增：capabilities — 给 consumer 一层抽象，避免被绑死到 skill / build_command 名字。
+  # consumer pact 里写 "我需要 server-action-support" 比 "我需要 nextjs-data-fetching skill" 更稳定。
+  capabilities:
+    - id: typecheck
+      backed_by:
+        build_command: compile_check
+      since: "0.1.0"
+    - id: lint
+      backed_by:
+        build_command: lint
+      since: "0.1.0"
+    - id: full-build
+      backed_by:
+        build_command: full_build
+      since: "0.1.0"
+    - id: rsc-rendering
+      backed_by:
+        skill: react-server-components
+      since: "0.1.0"
+    - id: server-action-support
+      backed_by:
+        skill: nextjs-data-fetching
+      since: "0.1.0"
+    - id: app-router-routing
+      backed_by:
+        skill: nextjs-app-router
+      since: "0.1.0"
+    - id: web-vitals-optimization
+      backed_by:
+        skill: nextjs-performance
+      since: "0.1.0"
+    - id: ts-strict-mode
+      backed_by:
+        rule: typescript-strict
+      since: "0.1.0"
+    # 显式声明"不支持"——比沉默更友好。consumer 想要 smoke-probe 时
+    # verify 会立刻告诉它"这个 adapter 不提供，去看 full-build"。
+    - id: smoke-probe
+      backed_by: null
+      since: "0.1.0"
+      reason: |
+        Next.js dev server 启动慢且 HMR 使 probe 结果不稳，本 adapter 的 SMOKE 等价物
+        由 full-build capability 承担——next build 成功即视为产物可部署。
+        未来版本将基于 'next start' + HTTP probe 提供真正的 smoke-probe。
+
 requires:
   tools:
     - name: node

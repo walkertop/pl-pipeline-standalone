@@ -25,7 +25,7 @@ mkdir -p pl/{changes,templates} .codebuddy/{agents,skills,rules} scripts
 cp $PL_ASSETS/pl/config.default.yaml pl/config.yaml
 
 # 装 adapter
-bash $PL_HOME/scripts/adapter-install.sh \
+pl adapter install \
   $PL_HOME/adapters/adapter-python-fastapi \
   .
 ```

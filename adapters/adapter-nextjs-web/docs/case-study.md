@@ -18,7 +18,7 @@ mkdir -p pl/{changes,templates} .codebuddy/{agents,skills,rules} scripts
 cp $PL_ASSETS/pl/config.default.yaml pl/config.yaml
 
 # 安装 adapter
-bash $PL_HOME/scripts/adapter-install.sh $PL_HOME/adapters/adapter-nextjs-web .
+pl adapter install $PL_HOME/adapters/adapter-nextjs-web .
 
 # 导出 build check
 export PL_BUILD_CHECK_CMD="npx tsc --noEmit"

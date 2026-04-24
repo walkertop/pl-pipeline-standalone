@@ -46,12 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: pl-status --self-check (on this repo via env override)
+      - name: pl status --self-check (via pl CLI; on this repo via env override)
         run: |
-          # 本仓 examples 是宿主；每个 demo 都可被 pl-status 识别
+          export PATH="$PWD/bin:$PATH"
+          # 本仓 examples 是宿主；每个 demo 都可被 pl status 识别
           for demo in examples/*/; do
             echo "=== $demo ==="
-            PL_PROJECT="$PWD/$demo" bash scripts/pl-status.sh --self-check
+            PL_PROJECT="$PWD/$demo" pl status --self-check
           done
 
   # -----------------------------------------------------------------
@@ -71,13 +72,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate ${{ matrix.adapter }}
-        run: bash scripts/adapter-validate.sh adapters/${{ matrix.adapter }}
+        run: |
+          export PATH="$PWD/bin:$PATH"
+          pl adapter validate adapters/${{ matrix.adapter }}
 
       - name: Dry-run install into tmp host
         run: |
+          export PATH="$PWD/bin:$PATH"
           mkdir -p /tmp/ci-host/pl
           cp assets/pl/config.default.yaml /tmp/ci-host/pl/config.yaml
-          bash scripts/adapter-install.sh --dry-run \
+          pl adapter install --dry-run \
             adapters/${{ matrix.adapter }} /tmp/ci-host
 
   # -----------------------------------------------------------------
@@ -90,20 +94,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 关键约定：adapter-validate 校验 metadata.id == basename(dir)（去掉可选的
+      # 'adapter-' 前缀），所以 CI 这里 id 必须等于 dest basename，否则 v1.5+ 起一定红。
       - name: Minimal scaffold validates
         run: |
-          bash scripts/adapter-create.sh ci-demo-min --dest /tmp/ci-min
-          bash scripts/adapter-validate.sh /tmp/ci-min
+          export PATH="$PWD/bin:$PATH"
+          pl adapter create ci-min --dest /tmp/ci-min
+          pl adapter validate /tmp/ci-min
 
       - name: Full scaffold validates
         run: |
-          bash scripts/adapter-create.sh ci-demo-full --dest /tmp/ci-full --full
-          bash scripts/adapter-validate.sh /tmp/ci-full
+          export PATH="$PWD/bin:$PATH"
+          pl adapter create ci-full --dest /tmp/ci-full --full
+          pl adapter validate /tmp/ci-full
 
       - name: Invalid id must fail
         run: |
-          if bash scripts/adapter-create.sh "Bad_ID" --dest /tmp/ci-bad >/dev/null 2>&1; then
-            echo "::error::adapter-create should reject invalid id"
+          export PATH="$PWD/bin:$PATH"
+          if pl adapter create "Bad_ID" --dest /tmp/ci-bad >/dev/null 2>&1; then
+            echo "::error::pl adapter create should reject invalid id"
             exit 1
           fi
 
@@ -135,3 +144,265 @@ jobs:
               sys.exit(1)
           print('✅ all Python files compile')
           "
+
+  # -----------------------------------------------------------------
+  # Job 6：v1.7 CDC broker 端到端冒烟测试
+  # 验证 trace-adapter-use → pl-contract-aggregate → pl-contract-verify 三件套
+  # 在干净环境里能跑通；并验证 verify --strict 能正确拦截 broken pact。
+  # -----------------------------------------------------------------
+  cdc-broker-smoke:
+    name: CDC broker smoke (aggregate + verify)
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pyyaml
+        run: pip install pyyaml
+
+      - name: Scenario 1 · happy path (aggregate then verify → exit 0)
+        run: |
+          set -euo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/changes" "$PROJ/pl"
+          cat > "$PROJ/.pl-adapter.yaml" <<'EOF'
+          apiVersion: pl.dev/v1
+          adapter:
+            id: nextjs-web
+            version: 0.1.0
+          build_adapter:
+            env:
+              PL_BUILD_CHECK_CMD: "echo build_ok"
+          EOF
+          cat > "$PROJ/pl/config.yaml" <<'EOF'
+          checks:
+            - id: compile_check
+              cmd: "${PL_BUILD_CHECK_CMD}"
+              required: true
+          gates:
+            D:
+              from: VERIFY
+              to: VERIFY
+              eval: all_checks.pass
+              on_failure: block
+              checks: [compile_check]
+          EOF
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
+          pl run --change ci-feat --gate D
+          pl trace use \
+            --change ci-feat --kind skill --id react-server-components \
+            --phase IMPLEMENT --by "agent:ci"
+          pl trace use \
+            --change ci-feat --kind capability --id typecheck \
+            --phase VERIFY --by "agent:ci"
+          pl contract aggregate
+          test -f "$PROJ/pl/contracts/ci-feat.consumed.yaml"
+          test -f "$PROJ/pl/contracts/_registry.yaml"
+          pl contract verify
+          echo "✅ scenario 1 OK"
+
+      - name: Scenario 2 · broken pact (verify must exit 1)
+        run: |
+          # GitHub Actions 默认 shell 是 'bash -e {0}'，所以即使脚本里 `set -uo pipefail`
+          # 也无法关掉 -e。期望失败的命令必须用 `set +e` 显式包起来再读 $?，
+          # 跟 Scenario 3 保持一致风格，避免再被这个坑咬。
+          set -euo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/contracts"
+          cat > "$PROJ/pl/contracts/ci-broken.consumed.yaml" <<'EOF'
+          apiVersion: piao.dev/v1
+          kind: ConsumerContract
+          metadata:
+            change_id: ci-broken
+            generated_at: "2026-04-23T18:00:00Z"
+            generator: pl-contract-aggregate.sh@v1.7.0
+            source_files: []
+            event_count: 1
+          provider:
+            adapter: nextjs-web
+            versions_seen: ["0.1.0"]
+          consumed:
+            capabilities:
+              - id: smoke-probe
+                uses: 1
+                first_seen: "2026-04-23T18:00:00Z"
+                last_seen: "2026-04-23T18:00:00Z"
+          EOF
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
+          set +e
+          pl contract verify
+          rc=$?
+          set -e
+          if [[ $rc -ne 1 ]]; then
+            echo "::error::expected exit 1 (broken pact uses backed_by:null capability), got $rc"
+            exit 1
+          fi
+          echo "✅ scenario 2 OK (verify correctly rejected broken pact, exit=$rc)"
+
+      - name: Scenario 3 · --check idempotency (aggregate twice → no diff)
+        run: |
+          set -euo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/changes" "$PROJ/pl"
+          cat > "$PROJ/.pl-adapter.yaml" <<'EOF'
+          apiVersion: pl.dev/v1
+          adapter:
+            id: nextjs-web
+            version: 0.1.0
+          build_adapter:
+            env:
+              PL_BUILD_CHECK_CMD: "echo build_ok"
+          EOF
+          cat > "$PROJ/pl/config.yaml" <<'EOF'
+          checks:
+            - id: compile_check
+              cmd: "${PL_BUILD_CHECK_CMD}"
+              required: true
+          gates:
+            D:
+              from: VERIFY
+              to: VERIFY
+              eval: all_checks.pass
+              on_failure: block
+              checks: [compile_check]
+          EOF
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
+          pl run --change ci-idem --gate D
+          pl trace use \
+            --change ci-idem --kind skill --id react-server-components \
+            --phase IMPLEMENT --by "agent:ci"
+          pl contract aggregate
+          set +e
+          pl contract aggregate --check
+          rc=$?
+          set -e
+          if [[ $rc -ne 0 ]]; then
+            echo "::error::expected --check exit 0 on clean state, got $rc"
+            exit 1
+          fi
+          echo "✅ scenario 3 OK (--check on clean state exits 0)"
+
+      # ---------------------------------------------------------------
+      # Scenario 4：criteria-only gate (v1 兼容 gate, 无 checks 字段)
+      # 必须仍然触发 ARCHIVE auto-aggregate hook。
+      # 这是 A1 dogfood 抓到的 bug 的回归测试——
+      # pl-runner 在 ITEMS_COUNT==0 时早出，曾绕过 maybe_run_archive_aggregate。
+      # 修复见 commit a5f1e26（fix(cdc): pl-runner ARCHIVE 钩子被绕过）。
+      # 不加这个 fixture，下次重构 pl-runner 极易 silently 回归。
+      # ---------------------------------------------------------------
+      - name: Scenario 4 · criteria-only ARCHIVE gate triggers auto-aggregate
+        run: |
+          set -euo pipefail
+          PROJ=$(mktemp -d)
+          mkdir -p "$PROJ/pl/changes" "$PROJ/pl"
+          cat > "$PROJ/.pl-adapter.yaml" <<'EOF'
+          apiVersion: pl.dev/v1
+          adapter:
+            id: nextjs-web
+            version: 0.1.0
+          EOF
+          # 关键点：gate G 故意只写 criteria, 不写 checks——模拟 demo 的 ARCHIVE gate
+          cat > "$PROJ/pl/config.yaml" <<'EOF'
+          gates:
+            G:
+              from: OBSERVE
+              to: ARCHIVE
+              eval: all_checks.pass
+              on_failure: block
+              criteria:
+                - "知识沉淀完成"
+          EOF
+          export PATH="$PWD/bin:$PATH"
+          export PL_HOME="$PWD" PL_PROJECT="$PROJ"
+          # 先打一个 adapter.use 事件，让 aggregate 有东西可聚
+          pl trace use \
+            --change ci-criteria --kind skill --id react-server-components \
+            --phase ARCHIVE --by "agent:ci"
+          # 触发 criteria-only gate G。期望：
+          #   1. gate 通过（exit 0）
+          #   2. auto-aggregate 自动跑（不被 ITEMS_COUNT==0 早出绕过）
+          #   3. pl/contracts/ 出现 pact + registry
+          OUT=$(pl run --change ci-criteria --gate G)
+          echo "$OUT"
+          if ! echo "$OUT" | grep -q "auto: pl-contract-aggregate"; then
+            echo "::error::criteria-only gate did NOT trigger auto-aggregate (regression of A1 bug)"
+            exit 1
+          fi
+          if [[ ! -f "$PROJ/pl/contracts/ci-criteria.consumed.yaml" ]]; then
+            echo "::error::expected pl/contracts/ci-criteria.consumed.yaml to exist"
+            ls -la "$PROJ/pl/contracts/" 2>&1 || true
+            exit 1
+          fi
+          if [[ ! -f "$PROJ/pl/contracts/_registry.yaml" ]]; then
+            echo "::error::expected pl/contracts/_registry.yaml to exist"
+            exit 1
+          fi
+          echo "✅ scenario 4 OK (criteria-only gate auto-aggregate fired, A1 bug regression test passes)"
+
+  # -----------------------------------------------------------------
+  # Job 7：bin/pl CLI dispatcher 单元测试（v1.8.3+）
+  # 守 v1.8.0 收口的 CLI：透传/错误处理/命名空间/exit code/bash 3.2 兼容
+  # 跑在 ubuntu (bash 5.x) 同时验证不会回归
+  # -----------------------------------------------------------------
+  cli-smoke:
+    name: bin/pl CLI smoke (tests/cli/test-pl.sh)
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pl CLI dispatcher tests
+        run: bash tests/cli/test-pl.sh
+
+  # -----------------------------------------------------------------
+  # Job 8：CDC 真实场景端到端（v1.8.3+）
+  # 在 demo-nextjs-todo / demo-fastapi-users 上真跑 CDC 全闭环：
+  #   pl trace use → pl contract aggregate → pl contract verify → pl contract query
+  # + dashboard /_data/contracts.json 端点冒烟
+  # 这是 v1.7 → v1.8 升级后的关键回归保险，比原 cdc-broker-smoke 的最小骨架更接近实战。
+  # -----------------------------------------------------------------
+  cdc-real-scenarios:
+    name: CDC real scenarios (demo-nextjs / demo-fastapi)
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pyyaml
+        run: pip install pyyaml
+      - name: Run CDC real scenario tests
+        run: bash tests/cli/test-cdc-real.sh
+
+  # -----------------------------------------------------------------
+  # Job 9：pl new + install.sh 端到端（v1.9.0+）
+  # 守 zero-friction 上手：5 个 stack × monorepo 三模块 × adapter 真装
+  # -----------------------------------------------------------------
+  pl-new-smoke:
+    name: pl new + install.sh smoke
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pl new tests (5 stacks + options)
+        run: bash tests/cli/test-pl-new.sh
+
+  # -----------------------------------------------------------------
+  # pl detect smoke — v1.10.0 新增
+  # 守 detector 准确性 + pl new --here 默认 dry-run 行为
+  # -----------------------------------------------------------------
+  pl-detect-smoke:
+    name: pl detect smoke (read-only suggestion)
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pl detect tests
+        run: bash tests/cli/test-pl-detect.sh
+

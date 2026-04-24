@@ -199,8 +199,9 @@ if [[ "$HAS_SMOKE" != "yes" ]]; then
   log_warn "adapter has no build_adapter.smoke configured"
   log_info "skipping SMOKE stage (not an error; adapter opted out)"
   trace_init "$CHANGE" "SMOKE" "script:pl-smoke"
+  trace_gate_start "E_smoke"
   trace_emit "smoke.skip" '{"reason":"no_smoke_config_in_adapter"}'
-  trace_emit "gate.eval" '{"gate":"E_smoke","result":"skipped","reason":"no_smoke_config"}'
+  trace_gate_end "E_smoke" "skipped" '{"reason":"no_smoke_config"}'
   $JSON_OUT && jq -nc '{gate:"E_smoke",result:"skipped",reason:"no_smoke_config"}'
   # skipped 视为 opt-out 不是 failure；返回 0 不阻塞整条流水
   exit 0
@@ -234,12 +235,15 @@ echo "  start:     ${DIM}$START_CMD${NC}"
 echo ""
 
 trace_init "$CHANGE" "SMOKE" "script:pl-smoke"
+trace_gate_start "E_smoke" "$(jq -nc --arg port "$SMOKE_PORT" --arg url "$READY_URL" --argjson probes "$N_PROBES" \
+  '{port:($port|tonumber),ready_url:$url,probe_count:$probes}')"
 trace_emit "smoke.start" "$(jq -nc --arg port "$SMOKE_PORT" --arg url "$READY_URL" --argjson probes "$N_PROBES" \
   '{port:($port|tonumber),ready_url:$url,probe_count:$probes}')"
 
 if $DRY_RUN; then
   log_info "dry-run, skipping boot"
   trace_emit "smoke.end" '{"result":"dryrun"}'
+  trace_gate_end "E_smoke" "skipped" '{"reason":"dry_run"}'
   exit 0
 fi
 
@@ -301,7 +305,7 @@ if ! $READY; then
   log_info "boot log tail:"
   tail -20 "$BOOT_LOG" | sed 's/^/    /'
   trace_emit "smoke.shutdown" "$(jq -nc --arg pid "$APP_PID" '{pid:($pid|tonumber),reason:"ready_timeout"}')"
-  trace_emit "gate.eval" '{"gate":"E_smoke","result":"blocked","reason":"ready_timeout"}'
+  trace_gate_end "E_smoke" "blocked" '{"reason":"ready_timeout"}'
   $JSON_OUT && jq -nc '{gate:"E_smoke",result:"blocked",reason:"ready_timeout"}'
   exit 1
 fi
@@ -378,10 +382,9 @@ trace_emit "smoke.shutdown" "$(jq -nc --arg pid "$APP_PID" '{pid:($pid|tonumber)
 GATE_RESULT="passed"
 [[ $FAIL -gt 0 ]] && GATE_RESULT="blocked"
 
-trace_emit "gate.eval" "$(jq -nc --arg result "$GATE_RESULT" --argjson p "$PASS" --argjson f "$FAIL" \
-  '{gate:"E_smoke",result:$result,pass:$p,fail:$f,eval:"all_probes.pass"}')"
-
 trace_emit "smoke.end" "$(jq -nc --arg result "$GATE_RESULT" '{result:$result}')"
+trace_gate_end "E_smoke" "$GATE_RESULT" "$(jq -nc --argjson p "$PASS" --argjson f "$FAIL" \
+  '{pass:$p,fail:$f,eval:"all_probes.pass"}')"
 
 echo ""
 echo "${BOLD}━━━ Summary ━━━${NC}"

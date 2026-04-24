@@ -51,7 +51,7 @@ build_adapter:
 
 执行入口：
 ```bash
-bash $PL_HOME/scripts/pl-runner.sh --check build
+pl run --check build
 ```
 
 **绝不在 rule / core script 里硬编码**具体命令（如 `gradle xxx` / `npm xxx`）。
@@ -91,8 +91,8 @@ bash $PL_HOME/scripts/pl-runner.sh --check build
 
 Agent / IDE 应周期性调用：
 ```bash
-bash $PL_HOME/scripts/should-build.sh        # 退出码 0=需要, 1=不需要
-bash $PL_HOME/scripts/should-build.sh --json # JSON 格式，供程序解析
+pl should-build        # 退出码 0=需要, 1=不需要
+pl should-build --json # JSON 格式，供程序解析
 ```
 
 （脚本若在独立仓尚未提供，由项目自行实现；通用阈值参考下表）
@@ -137,7 +137,7 @@ Coding 检查点（建议时机）:
 
 每次成功构建后**必须**标记，供时间兜底规则正确计算：
 ```bash
-bash $PL_HOME/scripts/should-build.sh --mark
+pl should-build --mark
 ```
 
 ---

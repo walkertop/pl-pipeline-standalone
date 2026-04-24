@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pl-pipeline.dev/schemas/consumer-contract-v1.json",
+  "title": "pl-pipeline ConsumerContract v1 (CDC fact ledger)",
+  "description": "由 pl-contract-aggregate.sh 从 adapter.use 事件流聚合产出的 consumer pact。每个 change 一份，记录'本次 change 实际消费了 adapter 哪些资产'的事实账本。注意：这是事实，不是意图——不要手写。",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "provider", "consumed"],
+  "properties": {
+    "apiVersion": { "type": "string", "const": "piao.dev/v1" },
+    "kind":       { "type": "string", "const": "ConsumerContract" },
+    "metadata": {
+      "type": "object",
+      "required": ["change_id", "generated_at", "generator"],
+      "properties": {
+        "change_id":    { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "generator":    { "type": "string", "description": "脚本名 + 版本，例如 pl-contract-aggregate.sh@v1.7.0" },
+        "source_files": { "type": "array", "items": { "type": "string" } },
+        "event_count":  { "type": "integer", "minimum": 0 }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "description": "本 change 所消费的 adapter（理论上一个 change 一个 adapter；若多个会拆多份契约）",
+      "required": ["adapter"],
+      "properties": {
+        "adapter":       { "type": "string", "description": "adapter id，如 nextjs-web" },
+        "versions_seen": {
+          "type": "array",
+          "description": "trace 流中见过的所有 version。> 1 个意味着 change 期间 adapter 被升级过。",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "consumed": {
+      "type": "object",
+      "description": "按 asset_kind 分组的消费事实。每条带使用次数和最后一次时间戳。",
+      "properties": {
+        "templates":      { "$ref": "#/definitions/assetGroup" },
+        "skills":         { "$ref": "#/definitions/assetGroup" },
+        "rules":          { "$ref": "#/definitions/assetGroup" },
+        "agents":         { "$ref": "#/definitions/assetGroup" },
+        "build_commands": { "$ref": "#/definitions/buildCommandGroup" },
+        "capabilities":   { "$ref": "#/definitions/assetGroup" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "assetGroup": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "uses"],
+        "properties": {
+          "id":         { "type": "string" },
+          "uses":       { "type": "integer", "minimum": 1, "description": "同一 change 内被消费的总次数" },
+          "first_seen": { "type": "string", "format": "date-time" },
+          "last_seen":  { "type": "string", "format": "date-time" },
+          "phases":     { "type": "array", "items": { "type": "string" }, "description": "消费发生在哪些阶段（去重）" }
+        }
+      }
+    },
+    "buildCommandGroup": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "uses"],
+        "properties": {
+          "id":         { "type": "string" },
+          "uses":       { "type": "integer", "minimum": 1 },
+          "pass":       { "type": "integer", "minimum": 0 },
+          "fail":       { "type": "integer", "minimum": 0 },
+          "first_seen": { "type": "string", "format": "date-time" },
+          "last_seen":  { "type": "string", "format": "date-time" },
+          "phases":     { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

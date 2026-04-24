@@ -1,0 +1,102 @@
+apiVersion: piao.dev/v1
+kind: ConsumerContract
+metadata:
+  change_id: add-todo-list
+  generated_at: "2026-04-23T18:49:04Z"
+  generator: pl-contract-aggregate.sh@v1.7.0
+  source_files:
+    - pipeline-output/trace/add-todo-list.events.jsonl
+  event_count: 14
+provider:
+  adapter: nextjs-web
+  versions_seen:
+    - 0.1.0
+consumed:
+  skills:
+    - id: nextjs-app-router
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: nextjs-data-fetching
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: nextjs-performance
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: react-server-components
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+  rules:
+    - id: nextjs-revalidate-for-non-fetch
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: react-hooks
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: typescript-strict
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+  agents:
+    - id: nextjs-architect
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - PLAN
+    - id: nextjs-reviewer
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - VERIFY
+  capabilities:
+    - id: app-router-routing
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: lint
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - VERIFY
+    - id: rsc-rendering
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: server-action-support
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - IMPLEMENT
+    - id: typecheck
+      uses: 1
+      first_seen: "2026-04-23T18:47:59Z"
+      last_seen: "2026-04-23T18:47:59Z"
+      phases:
+        - VERIFY

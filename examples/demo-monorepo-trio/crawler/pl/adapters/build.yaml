@@ -1,0 +1,19 @@
+# 爬虫模块自定义 build 命令（无完整 adapter）
+adapter: custom
+type: scrapy
+commands:
+  compile_check:
+    cmd: "python -m py_compile spiders/example.py"
+    success_pattern: "^$"
+    timeout_sec: 30
+  lint:
+    cmd: "ruff check spiders/ tests/"
+    timeout_sec: 60
+  test:
+    cmd: "pytest -q tests/"
+    timeout_sec: 120
+
+env:
+  PL_BUILD_CHECK_CMD: "python -m py_compile spiders/example.py"
+  PL_LINT_CMD: "ruff check spiders/ tests/"
+  PL_TEST_CMD: "pytest -q tests/"

@@ -55,6 +55,7 @@ PROJECT="$(cd "$PROJECT" && pwd)"
 DASH_DIR="$PL_HOME/dashboard"
 DATA_FILE="$DASH_DIR/_data.json"
 TRACE_DIR="$PROJECT/pipeline-output/trace"
+CONTRACTS_DIR="$PROJECT/pl/contracts"
 
 # ─── 日志颜色 ────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[0;33m'; NC='\033[0m'
@@ -139,6 +140,9 @@ start_server() {
       --dash-dir "$DASH_DIR" \
       --trace-dir "${TRACE_DIR:-}" \
       --data-file "$DATA_FILE" \
+      --pl-home "$PL_HOME" \
+      --pl-project "$PROJECT" \
+      --contracts-dir "$CONTRACTS_DIR" \
       --port "$PORT" \
       --bind 127.0.0.1
   fi

@@ -1,0 +1,79 @@
+apiVersion: piao.dev/v1
+kind: ContractRegistry
+metadata:
+  generated_at: "2026-04-23T18:49:04Z"
+  generator: pl-contract-aggregate.sh@v1.7.0
+  change_count: 1
+  adapter_count: 1
+  total_use_events: 14
+pacts:
+  - change_id: add-todo-list
+    adapter: nextjs-web
+    versions_seen:
+      - 0.1.0
+    consumed_summary:
+      agents:
+        distinct: 2
+        uses: 2
+      capabilities:
+        distinct: 5
+        uses: 5
+      rules:
+        distinct: 3
+        uses: 3
+      skills:
+        distinct: 4
+        uses: 4
+    last_seen: "2026-04-23T18:47:59Z"
+adapters:
+  nextjs-web:
+    consumer_count: 1
+    consumers:
+      - add-todo-list
+    asset_usage:
+      agents:
+        nextjs-architect:
+          changes: 1
+          total_uses: 1
+        nextjs-reviewer:
+          changes: 1
+          total_uses: 1
+      capabilities:
+        app-router-routing:
+          changes: 1
+          total_uses: 1
+        lint:
+          changes: 1
+          total_uses: 1
+        rsc-rendering:
+          changes: 1
+          total_uses: 1
+        server-action-support:
+          changes: 1
+          total_uses: 1
+        typecheck:
+          changes: 1
+          total_uses: 1
+      rules:
+        nextjs-revalidate-for-non-fetch:
+          changes: 1
+          total_uses: 1
+        react-hooks:
+          changes: 1
+          total_uses: 1
+        typescript-strict:
+          changes: 1
+          total_uses: 1
+      skills:
+        nextjs-app-router:
+          changes: 1
+          total_uses: 1
+        nextjs-data-fetching:
+          changes: 1
+          total_uses: 1
+        nextjs-performance:
+          changes: 1
+          total_uses: 1
+        react-server-components:
+          changes: 1
+          total_uses: 1

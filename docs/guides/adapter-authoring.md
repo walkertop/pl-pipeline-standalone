@@ -189,6 +189,55 @@ build_adapter:
 
 ---
 
+### 3.4 capabilities · 给 consumer 一层抽象（v1.7+）
+
+`provides.capabilities[]` 是 v1.7 双向 CDC 引入的可选段。
+
+**为什么要它**：v1.6 之前，consumer（change）的 pact 只能声明"我用了 skill X / build_command Y"。
+但这意味着 consumer 被绑死到 adapter 的内部实现名——adapter 内部把 `nextjs-data-fetching` 改名成
+`nextjs-server-actions` 就是 breaking change。
+
+加了 capability 抽象层之后，consumer 可以声明"我需要 `server-action-support`"，
+adapter 内部用什么 skill 实现是它自己的事。
+
+#### 语法
+
+```yaml
+provides:
+  capabilities:
+    - id: <kebab-case-id>                # 必填，如 typecheck / server-action-support
+      backed_by:                         # 必填，指向真实实现（或 null）
+        skill: <skill-id>                # 四选一：skill / rule / build_command / null
+        # rule: <rule-id>
+        # build_command: <command-id>
+      since: <semver>                    # 可选，从哪个 adapter 版本开始支持
+      deprecated_in: <semver>            # 可选，从哪个版本起标为废弃（verify 给 warning）
+      removed_in: <semver>               # 可选，从哪个版本起移除（verify 报 broken）
+      reason: <text>                     # 可选，废弃原因 / 不支持原因
+```
+
+#### 三种特殊用法
+
+| 写法 | 语义 |
+|---|---|
+| `backed_by: { skill: nextjs-data-fetching }` | adapter 用这个 skill 实现该 capability |
+| `backed_by: null` + `reason: ...` | **显式声明**"本 adapter 不支持此 capability"。比"不写"更明确，避免 consumer 猜 |
+| `deprecated_in: 0.3.0` | 0.3 起 verify 给 warning，consumer 应迁移；`removed_in` 触发后才阻塞 |
+
+#### 命名建议
+
+- 用问题域语言命名（`server-action-support`、`smoke-probe`），不要用实现名（`nextjs-data-fetching-skill`）
+- 一个 capability 对应一个 backed_by；如果一个能力需要多个底层资产配合，
+  说明它是"复合能力"，应当拆成多个 capability 各自单一职责
+
+#### 何时不写
+
+- 一次性 / 内部实现细节 → 不需要做成 capability
+- 还没有任何 consumer 用过 → 等真有 pact 引用了再补
+- adapter 还在 0.x 早期实验 → 直接迁移 skill 名也可以接受
+
+---
+
 ## 4. rules 写作规范
 
 ### 4.1 frontmatter
@@ -356,7 +405,7 @@ cd /path/to/user-project
 cp $PL_ASSETS/pl/config.default.yaml pl/config.yaml
 
 # 安装 adapter
-bash $PL_HOME/scripts/adapter-install.sh \
+pl adapter install \
   $PL_HOME/adapters/adapter-<your-stack> \
   .
 ```
@@ -375,7 +424,7 @@ scripts/adapter-<stack>-{build,verify,lint}.sh ← 复制 scripts
 发布前务必通过：
 
 ```bash
-bash $PL_HOME/scripts/adapter-validate.sh $PL_HOME/adapters/adapter-<your-stack>
+pl adapter validate $PL_HOME/adapters/adapter-<your-stack>
 ```
 
 校验项：
@@ -474,7 +523,220 @@ cd "$PROJECT_ROOT"               # 由 SCRIPT_DIR 推导
 
 ---
 
-## 12. 发布 checklist
+## 12. 在 consumer 项目里启用契约校验（v1.7+ CDC）
+
+如果你的 adapter 已经被某些项目引用，强烈建议这些项目把 v1.7 的 CDC 校验接入 CI，
+这样你后续升级 adapter 时，能在 PR 阶段就看到"会打到哪些 consumer"。
+
+### 12.1 consumer 项目侧 CI snippet（GitHub Actions）
+
+把这段加到 consumer 项目的 `.github/workflows/contract.yml`：
+
+```yaml
+name: Contract verify
+
+on:
+  pull_request:
+    paths:
+      - 'pl/contracts/**'
+      - '.pl-adapter.yaml'
+  push:
+    branches: [main]
+
+jobs:
+  contract-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive          # 假设 pl-pipeline 作为 submodule
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pyyaml
+
+      # 1. 检查 pact 是否最新（漏 commit pact 会失败）
+      - name: pact freshness check
+        run: |
+          export PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD"
+          export PATH="$PL_HOME/bin:$PATH"
+          pl contract aggregate --check
+
+      # 2. 拿 pact 对账当前 adapter（adapter PR 升级时会拦）
+      - name: contract verify --strict
+        run: |
+          export PL_HOME="$PWD/vendor/pl-pipeline" PL_PROJECT="$PWD"
+          export PATH="$PL_HOME/bin:$PATH"
+          pl contract verify --strict
+```
+
+### 12.2 adapter 仓库侧 CI snippet（你自己的 adapter PR 拦截）
+
+如果 adapter 单独发版（不是放在 pl-pipeline-standalone 里），在 adapter 仓库加：
+
+```yaml
+name: Contract verify (adapter side)
+
+on:
+  pull_request:
+    paths:
+      - 'adapter.yaml'
+      - 'skills/**'
+      - 'rules/**'
+      - 'templates/**'
+
+jobs:
+  cross-consumer-impact:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        consumer: [proj-a, proj-b]   # 列出所有用本 adapter 的 consumer 项目
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: this-adapter }
+      - uses: actions/checkout@v4
+        with:
+          repository: your-org/${{ matrix.consumer }}
+          path: consumer
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pyyaml
+
+      # 用本 PR 的 adapter.yaml 替换 consumer 项目的 adapter，对账
+      - name: verify against consumer ${{ matrix.consumer }}
+        run: |
+          # 假设 pl-pipeline 也是 consumer 的 submodule
+          export PL_HOME="$PWD/consumer/vendor/pl-pipeline" PL_PROJECT="$PWD/consumer"
+          export PATH="$PL_HOME/bin:$PATH"
+          pl contract verify --strict
+```
+
+### 12.3 退出码语义
+
+| exit | 含义 | 推荐 CI 行为 |
+|---|---|---|
+| 0 | 全部 satisfied（含 warning，非 strict 模式） | 通过 |
+| 1 | 有 broken pact / `--strict` 下有 warning | block PR |
+| 2 | 参数错误 / 找不到 adapter 文件 | block PR（配置问题） |
+
+### 12.4 最常见的拦截场景
+
+- **adapter 默默删了一个 skill**：consumer 还在用 → broken
+- **adapter capability 加了 `removed_in: <当前版本>`**：consumer 引用未迁移 → broken
+- **adapter capability 标 `deprecated_in`**：consumer 还在用 → warn（`--strict` 才阻塞）
+- **adapter 改名 skill `foo` → `bar`**：consumer 引用 `foo` → broken（除非 capability 抽象层吸收了改名）
+
+→ 这正是 `provides.capabilities[]` 的价值：把这些"内部改名"挡在 capability 层之内，
+   不打到 consumer。详见 [§3.4 capabilities](#34-capabilities--给-consumer-一层抽象v17)。
+
+---
+
+## 12.5 反查谁在用某个资产（pl-contract-query · v1.7+）
+
+写到 §11/§12 你会自然遇到一个问题：**adapter 想砍一个 skill / 改一个 capability，
+怎么先看清"谁在用"？** 这就是 `pl-contract-query.sh` 的角色——它不做任何 verify
+行为，只是把已经聚合好的 pact + registry 反向格式化展示。
+
+### 12.5.1 数据源
+
+读取 `$PL_PROJECT/pl/contracts/`：
+- `_registry.yaml` — 全局反向索引（aggregate 时维护）
+- `<change>.consumed.yaml` — 每个 change 的 pact
+
+→ pl-contract-query **只查本 project 内的** pact。跨 project 反查（"全公司谁在用 typecheck？"）
+是 v1.8+ 的话题。当下做法：每个 consumer project 自己跑一次 query，结果汇总到 release notes。
+
+### 12.5.2 5 种查询模式
+
+```bash
+# 0) 全局汇总（最常用，0 参数）
+$ pl-contract-query.sh
+━━━ Contract Summary ━━━
+  1 pact(s) across 1 adapter(s)
+
+  adapter                  pacts   caps  skl  rul  bld  agt
+  nextjs-web                   1      5    4    3    0    2
+
+# 1) 反查 capability（adapter 想砍/改前必跑）
+$ pl-contract-query.sh --capability typecheck
+━━━ Query: capability/typecheck ━━━
+  1 consumer(s) found in 1 pact(s)
+
+  change            adapter             uses  phases    last_seen
+  add-todo-list     nextjs-web@0.1.0       1  VERIFY    2026-04-23T18:47:59Z
+
+# 2) 反查具体 skill / rule / build_command / agent（同结构）
+$ pl-contract-query.sh --skill react-server-components
+$ pl-contract-query.sh --rule typescript-strict
+$ pl-contract-query.sh --build-command compile_check
+$ pl-contract-query.sh --agent nextjs-architect
+
+# 3) 列某 adapter 的全部 consumer（adapter 作者升级前快速确认范围）
+$ pl-contract-query.sh --adapter nextjs-web
+━━━ Adapter: nextjs-web ━━━
+  1 consumer pact(s)
+
+  ■ add-todo-list  (14 events)
+      capabilities: app-router-routing, lint, rsc-rendering, server-action-support, typecheck
+      skills: nextjs-app-router, nextjs-data-fetching, nextjs-performance, react-server-components
+      rules: nextjs-revalidate-for-non-fetch, react-hooks, typescript-strict
+      agents: nextjs-architect, nextjs-reviewer
+
+# 4) 单 change 的友好版 pact 视图（review 一个 change 用了什么）
+$ pl-contract-query.sh --change add-todo-list
+
+# 5) 任何模式都可加 --json（CI / 脚本组合）
+$ pl-contract-query.sh --capability typecheck --json
+{
+  "apiVersion": "piao.dev/v1",
+  "kind": "ContractQueryReport",
+  "query": { "kind": "capability", "id": "typecheck", "adapter_filter": null },
+  "hit_count": 1,
+  "hits": [ { "change_id": "add-todo-list", ... } ]
+}
+```
+
+可选 `--adapter <id>` 过滤：当多个 adapter 巧合提供同名资产时，限定查询范围。
+
+### 12.5.3 典型工作流
+
+**adapter 作者「我想删 skill X」**：
+```bash
+# 在 adapter 仓库里（vendor 一份 pl-pipeline，或 submodule）
+export PL_HOME=$PWD/vendor/pl-pipeline PL_PROJECT=$PWD/examples/some-consumer
+export PATH="$PL_HOME/bin:$PATH"
+pl contract query --skill X
+# 0 hits → 安全删；>0 hits → 先发 capability 抽象 + deprecated_in
+```
+
+**consumer 作者「我升级 adapter 之前要看自己用了啥」**：
+```bash
+pl-contract-query.sh --change <my-change>
+# 对照 adapter 新版的 release note 看哪些资产被 deprecate
+```
+
+### 12.5.4 退出码
+
+| code | 含义 |
+|---|---|
+| 0 | 查询完成（命中 0 条也算成功） |
+| 1 | 找不到 contracts 目录 / pact 文件损坏 |
+| 2 | 参数错误（如多个 `--skill/--rule/...` 同时传） |
+
+### 12.5.5 与 verify 的边界
+
+|  | aggregate | verify | **query** |
+|---|---|---|---|
+| 写 pact | ✅ | ❌ | ❌ |
+| 读 pact | ❌ | ✅ | ✅ |
+| 读 adapter.yaml | ❌ | ✅ | ❌ |
+| 报告 broken/warn | ❌ | ✅ | ❌ |
+| **格式化展示** | ❌ | 部分 | ✅ |
+
+→ query 是纯读 + 纯展示，**永远不会触发 broken/warn**。它的价值在"决策前的事实陈述"。
+
+---
+
+## 13. 发布 checklist
 
 当你准备好贡献一个新 adapter 时：
 
@@ -486,6 +748,7 @@ cd "$PROJECT_ROOT"               # 由 SCRIPT_DIR 推导
 - [ ] 有至少 1 个迁移 retro 文档（`docs/retros/asset-migration/<batch>.md`）
 - [ ] CHANGELOG.md 在 v<版本> 节记录新增 adapter
 - [ ] 在 `adapters/README.md`（若有）清单中加一行
+- [ ] 若声明了 `provides.capabilities[]`：每条 capability 的 `backed_by` 真的指向存在的 skill/rule/build_command（或显式 `null` + reason）
 
 ---
 

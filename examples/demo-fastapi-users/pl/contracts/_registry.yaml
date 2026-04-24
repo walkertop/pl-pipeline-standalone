@@ -1,0 +1,79 @@
+apiVersion: piao.dev/v1
+kind: ContractRegistry
+metadata:
+  generated_at: "2026-04-23T18:57:27Z"
+  generator: pl-contract-aggregate.sh@v1.7.0
+  change_count: 1
+  adapter_count: 1
+  total_use_events: 14
+pacts:
+  - change_id: add-users-api
+    adapter: python-fastapi
+    versions_seen:
+      - 0.1.0
+    consumed_summary:
+      agents:
+        distinct: 2
+        uses: 2
+      build_commands:
+        distinct: 3
+        uses: 3
+      rules:
+        distinct: 5
+        uses: 5
+      skills:
+        distinct: 4
+        uses: 4
+    last_seen: "2026-04-23T18:57:12Z"
+adapters:
+  python-fastapi:
+    consumer_count: 1
+    consumers:
+      - add-users-api
+    asset_usage:
+      agents:
+        fastapi-architect:
+          changes: 1
+          total_uses: 1
+        fastapi-reviewer:
+          changes: 1
+          total_uses: 1
+      build_commands:
+        compile_check:
+          changes: 1
+          total_uses: 1
+        lint:
+          changes: 1
+          total_uses: 1
+        test:
+          changes: 1
+          total_uses: 1
+      rules:
+        api-error-handling:
+          changes: 1
+          total_uses: 1
+        fastapi-conventions:
+          changes: 1
+          total_uses: 1
+        fastapi-depends-pass-callable:
+          changes: 1
+          total_uses: 1
+        fastapi-no-sync-blocking-in-async:
+          changes: 1
+          total_uses: 1
+        python-typing-strict:
+          changes: 1
+          total_uses: 1
+      skills:
+        fastapi-dependency-injection:
+          changes: 1
+          total_uses: 1
+        pydantic-v2-patterns:
+          changes: 1
+          total_uses: 1
+        pytest-async:
+          changes: 1
+          total_uses: 1
+        sqlalchemy-async:
+          changes: 1
+          total_uses: 1

@@ -151,17 +151,19 @@ prompt: |
   api: {api_ref}
   每完成一个 task，调用 should-build.sh 判断是否构建 + 更新 taskdag.md task 状态。
   遇到栈级问题时，加载对应栈级 skill/rule。
+  **每次显式加载/调用 adapter 资产（skill / rule / template / agent）后**，
+  调用一次 `trace-adapter-use.sh` 留下消费证据（见下方 Adapter Usage Tracking）。
 ```
 
 ### VERIFY 阶段（脚本）
 ```bash
-bash $PL_HOME/scripts/pl-runner.sh --change {change_id} --gate D
+pl run --change {change_id} --gate D
 ```
 读取输出，更新 `.state.md` 的 Self-Check Results。
 
 ### SMOKE 阶段（脚本）
 ```bash
-bash $PL_HOME/scripts/pl-smoke.sh --change {change_id}
+pl smoke --change {change_id}
 ```
 
 ### OBSERVE 阶段
@@ -180,6 +182,10 @@ prompt: |
   2. 把新发现的通用 pattern 沉淀为 rule/skill
   3. 更新项目 ARCHITECTURE_SNAPSHOT.md
   4. 把 .state.md 的 stage 更新为 archived
+  5. v1.7+：pl-runner 在 ARCHIVE gate (GATE_TO=ARCHIVE) 通过后会**自动**调用
+     pl-contract-aggregate.sh，输出 pl/contracts/<change>.consumed.yaml +
+     pl/contracts/_registry.yaml。归档结束前**必须** git add 这两个文件——
+     它们是契约事实账本，不是中间产物。漏 commit 会让下次 verify --strict 误报。
 ```
 
 ---
@@ -203,11 +209,180 @@ prompt: |
 
 ---
 
+## 🧭 观测系统设计原则（v1.6.1+，扩展事件类型时必须遵守）
+
+未来给 trace 流增加新事件类型 / 新字段时，必须满足以下硬约束。
+违反任意一条都会让监督数据变成噪声，请直接拒绝相关扩展请求。
+
+### 原则 1：字段必须有真实可获得的数据源
+
+> **不要为"以后可能用得上"加字段。空字段对监督者是噪声，不是中性。**
+
+举例：
+- ❌ 错误：在事件里加 `cost_usd` 字段，但 Cursor / Claude Code 不暴露 per-turn token，
+  实际永远填不上真实值。这种字段会让聚合脚本永远输出"未知"或"0"，误导监督者。
+- ✅ 正确：在 schema 里**预留**约定字段名，事件 emit 时不填；当未来切到 API 直调有真实数据源时再填。
+
+判定方法：每加一个字段，必须能回答"**谁、在什么时间点、用什么命令/接口能拿到这个值**"。
+答不上来，就不加。
+
+### 原则 2：事件必须能稳定 emit，不依赖 LLM 自觉
+
+> **任何"让 LLM 在回复里输出某个标记"或"让 LLM 记得调某个脚本"的设计都不可靠。**
+
+举例：
+- ❌ 错误：让 LLM 在每次回复开头输出 `agent.turn.start`，由解析器提取——LLM 漏发、格式漂移
+- ❌ 错误：让 LLM 调 `pl-turn-start.sh`——多步推理中很容易遗漏
+- ✅ 正确：脚本（pl-runner / pl-smoke / 未来的 pl-agent-call）自己包住调用，自己 emit
+- ✅ 正确：用统计代理（如 `pl-active-time.sh` 基于事件密度）反推，不要求 LLM 配合
+
+### 原则 3：事件必须自包含
+
+> **每条事件单独看都能定位到 change / phase / span，不依赖外部目录结构或运行时上下文重建。**
+
+为此 envelope 里强制带 `change_id`、`trace_id`、`phase`、可选 `span_id` / `parent_span_id`。
+不要把"这条事件是哪个 change 的"信息只放在文件名里——多文件聚合、broker、跨工具消费都会失败。
+
+### 原则 4：观测数据是诊断工具，不是 KPI
+
+> **同一份数据可以作为"事后归因"的依据，但不应该作为事前的目标。**
+
+举例（监督者必须警惕的反模式）：
+- ❌ 用 `verify_first_pass_rate` 给团队打 KPI → 团队会把 spec 写得过度防御来避免 retry
+- ❌ 用 `agent_active_time` 给 AI 打 KPI → AI 会跳过思考步骤
+- ❌ 用 `retry_count` 给绩效 → 团队会隐藏 retry（手动跑、不进 trace）→ 数据失真
+- ✅ 用这些数据问"为什么"，不要设阈值要求"必须低于 X"
+
+---
+
+## 🔗 Adapter Usage Tracking（v1.6+，观测用）
+
+### 为什么要做这件事
+
+`piao-contract-drift-compute.sh` 解决的是 "adapter 单方面声明宿主应该是什么样" 的问题，
+属于 Provider→Host 单向。我们还缺另一半："consumer（change）实际用了 adapter 什么"。
+
+v1.7 把这"另一半"补全成了完整的双向闭环：
+
+```
+   ┌─────────────────────────────────────────────────────────────┐
+   │  IMPLEMENT/VERIFY 阶段                                       │
+   │  ─────────────────                                           │
+   │  agent / pl-runner 每次用了 adapter 资产 → trace-adapter-use │
+   │                              ↓                               │
+   │  pipeline-output/trace/<change>.events.jsonl                 │
+   │  （adapter.use 事件流，事实账本）                              │
+   └─────────────────────────────────────────────────────────────┘
+                                 ↓
+   ┌─────────────────────────────────────────────────────────────┐
+   │  ARCHIVE 阶段（或 CI 任意时刻）                                │
+   │  ─────────────────                                           │
+   │  pl-contract-aggregate.sh                                    │
+   │  ─→ pl/contracts/<change>.consumed.yaml  (per-change pact)   │
+   │  ─→ pl/contracts/_registry.yaml          (跨 change 反向索引)  │
+   └─────────────────────────────────────────────────────────────┘
+                                 ↓
+   ┌─────────────────────────────────────────────────────────────┐
+   │  adapter PR（升级/重构）触发                                   │
+   │  ─────────────────                                           │
+   │  pl-contract-verify.sh [--strict]                            │
+   │  ─→ 拿当前 adapter.yaml provides 对账所有 pact               │
+   │  ─→ broken 项阻断 PR：哪个 change 会被打到、为什么            │
+   └─────────────────────────────────────────────────────────────┘
+```
+
+回答这些问题：
+
+- adapter 升级会打到哪些 change？→ `pl-contract-verify.sh`
+- 哪些 skill / rule / template 是高频使用，哪些 0 次？→ `_registry.yaml.adapters[*].asset_usage`
+- adapter 默默删能力或改名 → `verify` 报 broken，CI 拦截
+- 我想砍这个 capability/skill 之前先看谁在用 → `pl-contract-query.sh --capability <id>` (v1.7.1+)
+
+### 何时记录
+
+只要发生下面任意一件事，就记一条 `adapter.use`：
+
+| 触发动作 | asset_kind | asset_id 取值 | 记录方 |
+|---------|-----------|---------------|--------|
+| `pl-runner` 执行的 check 引用了 `${PL_*}` env | `build_command` | check id | 自动（脚本内挂钩） |
+| Agent 显式加载某个 skill 完成 task | `skill` | skill 的 frontmatter id | Agent 主动 |
+| Agent 应用了某条 rule 修复代码 | `rule` | rule 的 frontmatter id | Agent 主动 |
+| 用 adapter 提供的模板生成 spec/plan/taskdag | `template` | 模板文件名（去后缀） | Agent 主动 |
+| Task 调用了 adapter 注册的 subagent | `agent` | agent id | Agent 主动 |
+
+### 怎么记录（Agent 侧）
+
+每次发生上面动作，**接着调用一次**：
+
+```bash
+pl trace use \
+  --change {change_id} \
+  --kind <skill|rule|template|agent|build_command|capability> \
+  --id <asset_id> \
+  --phase <SPEC|PLAN|IMPLEMENT|VERIFY|SMOKE|OBSERVE|ARCHIVE> \
+  --by "agent:<your-agent-id>" \
+  --note "<可选简短说明，例如为什么用这个>"
+```
+
+### 重要约束
+
+- **只观测，不阻塞**：本事件不参与任何 gate 评估，没记也不会让 change 失败。
+- **可重复**：同一资产被多次使用，就多次记录，broker 后续做 dedup。
+- **不臆测**：只在 agent 真的"加载了/调用了/应用了"的那一刻记录；不要为了好看补记。
+
+### 何时跑 broker（aggregator + verify）
+
+| 时机 | 命令 | 谁跑 |
+|---|---|---|
+| ARCHIVE 阶段或 PR 提交前 | `pl contract aggregate` | 自动（pipeline-master） |
+| ARCHIVE 阶段或 PR 提交前 | `pl contract aggregate --check` | CI 拦截"忘了 commit pact"的 PR |
+| adapter PR 上 | `pl contract verify --strict` | CI 拦截 breaking 升级 |
+| 平时调试 | `pl contract verify --change <id>` | 人 |
+| adapter 砍能力前 / consumer 升级前 | `pl contract query --capability <id>` | 人（决策前的事实查询，v1.7.1+） |
+
+`pl/contracts/*.yaml` **应当 commit 进 git**——它是事实账本，不是中间产物。
+diff 即可读、可 review。
+
+---
+
+## 🏷 release / tag 纪律（v1.7.3.1+ 教训）
+
+打版本 tag（`pl-vX.Y.Z`）前**必须先确认对应 commit 在 GitHub Actions 上 CI 是绿的**：
+
+```bash
+# tag 之前
+gh run list --commit $(git rev-parse HEAD) --limit 1
+# 看到 "completed success" 才打 tag；红的话先修 CI 再 tag
+```
+
+**为什么**：v1.7.0 / 1 / 2 / 3 这 4 个 tag 都长在红 CI 上跑了 12+ 小时才被发现，
+原因是 commit 完就立刻 tag-and-push 没等 CI。tag 长在红基础上 = 历史欠债 ——
+后续要么需要 force-move tag（破坏所有已 fetch 的 client），要么发 patch tag
+（如 `pl-v1.7.3.1`）擦屁股。**事先 30 秒等 CI，胜过事后 30 分钟修历史。**
+
+如果是无法等 CI 的紧急情况（hotfix 等），明确在 commit message / changelog 里
+标注"该 tag 暂未通过 CI"，避免下游误信。
+
+---
+
+## 🌐 distribution / install 纪律（v1.9.0 教训）
+
+任何 `curl ... | bash` / `wget ... | bash` 的安装链路 **要求仓库是 public**。
+建议安装新方案前先 `gh api repos/<owner>/<name> --jq '.private'` 自查：
+- `false` → curl|bash 可用
+- `true`  → 必须用 `gh repo clone` / `git clone git@github.com:...` + 本地 install.sh
+
+**为什么**：v1.9.0 发布时仓库尚 private，用户跑示例 curl 必 404。raw.githubusercontent.com
+对私有仓的匿名 GET 一律返回 404（不是 401，因为 GitHub 不愿暴露存在性）。
+这种"看似奇怪的 404"很难凭直觉定位，**事先一行 visibility check 胜过事后 debug HTTP**。
+
+---
+
 ## 📊 状态查看
 
 当用户问状态时：
 ```bash
-bash $PL_HOME/scripts/pl-status.sh --change {change_id}
+pl status {change_id}
 ```
 并用自然语言总结当前进度（阶段 / 任务 / gate / 阻塞）。
 
