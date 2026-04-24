@@ -393,3 +393,16 @@ jobs:
       - name: Run pl new tests (5 stacks + options)
         run: bash tests/cli/test-pl-new.sh
 
+  # -----------------------------------------------------------------
+  # pl detect smoke — v1.10.0 新增
+  # 守 detector 准确性 + pl new --here 默认 dry-run 行为
+  # -----------------------------------------------------------------
+  pl-detect-smoke:
+    name: pl detect smoke (read-only suggestion)
+    runs-on: ubuntu-latest
+    needs: scripts-lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pl detect tests
+        run: bash tests/cli/test-pl-detect.sh
+

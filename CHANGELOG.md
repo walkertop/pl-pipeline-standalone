@@ -7,6 +7,75 @@
 
 ---
 
+## [pl-v1.10.0] - 2026-04-24
+
+### 新增
+
+#### `pl detect` / `pl scan` —— 扫描你的项目，给出建议（不写文件）
+
+替代之前 `pl new --here` "硬塞模板"的强势作风。新姿势是 **detect → suggest → 你拍板**：
+
+```bash
+cd /your/existing/project
+pl detect                 # 扫描子目录，识别 stack，给建议；纯只读
+pl detect --json          # JSON 输出，给脚本/CI 消费
+pl scan                   # detect 的别名
+```
+
+**识别清单（v1.10.0）：**
+- 前端：`Next.js`（package.json 有 next 依赖）、`Vue + pnpm monorepo`（pnpm-workspace.yaml + Vue 依赖）
+- Python：`FastAPI`、`Scrapy`、`dlt + Prefect`、未识别的通用 Python
+- 契约：`OpenAPI` 文件（识别为 CDC 锚点）
+- 文档：`docs/` 下 ≥ 8 份 .md（识别为成熟规格，建议跳过 SPEC 阶段）
+- 骨架未初始化：`apps/+packages/` 但无 package.json；`src/+tests/` 但无 pyproject.toml
+- 已接入 pl：模块根有 `pl/config.yaml`
+
+每条 detection 输出 module / stack / confidence (high/medium/low) / evidence / suggestion。
+
+#### `pl new --here` 默认改为只读 dry-run
+
+之前的"灌模板"作风太武断。现在 `pl new --here` **不带 `--stack` 时自动调 detect**，
+输出建议 + 提示下一步加 `--stack` 重跑。**完全不写文件**。
+
+```bash
+pl new whatever --here                    # 跑 detect，给建议，零写入
+pl new whatever --here --stack bare       # 显式 → 装 pl 骨架（既有行为）
+pl new whatever --here --stack fastapi    # 显式 → 装 fastapi adapter（既有行为）
+```
+
+老用法 100% 向后兼容（指定 `--stack` 即按既有逻辑装）。
+
+### 修复
+
+无（pure addition）。
+
+### 改进
+
+- README "30 秒上手" 段落升级到 v1.10：突出 `pl detect`，已有项目接入流程改为"先 detect 后选 stack"。
+- `pl help` 把 `detect` 列在核心命令第一位（鼓励先扫描后操作）。
+- 测试套件 +19 case（`tests/cli/test-pl-detect.sh`），覆盖：
+  - 9 种 detector 准确性（fixture 项目验证）
+  - JSON 输出 schema 校验
+  - bash 3.2 兼容（不应有 unbound variable / declare -A 错误）
+  - `pl new --here` 默认 dry-run 行为（验证不写文件）
+  - `pl new --here --stack bare` 仍写文件（不破现有行为）
+
+### CI
+
+- 新增 `pl-detect-smoke` job（`.github/workflows/ci.yml`）。
+
+### 教训沉淀
+
+设计这个能力的契机是：v1.9.x 的 `pl new --here` 太强势，遇到 shop_agent 这种"已有
+完整规格 + 初步代码骨架"的项目时硬塞模板会破坏既有结构。**正确姿势是工具应该
+"先看清现状再建议"**，而不是"以为自己什么都懂"。
+
+技术坑：bash 3.2 (macOS 默认) + `set -euo pipefail` + process substitution
+(`< <(find | sort)`) 会 silent crash。本脚本特殊禁用 `-e` 和 `pipefail`，
+单 detector 失败不影响其他。
+
+---
+
 > 📍 **2026-04-23 阶段性回顾**：v1.3.x 观察层系列已在两天内完成
 > （v1.3.0-alpha → v1.4.0-alpha → v1.3.2-alpha → v1.3.2-alpha.2）。
 > 总结文档 + 下一阶段规划见 [`docs/milestones/2026-04-v1.3.x-summary.md`](./docs/milestones/2026-04-v1.3.x-summary.md)。

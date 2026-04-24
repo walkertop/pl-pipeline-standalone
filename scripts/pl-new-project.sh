@@ -60,7 +60,8 @@ usage() {
 
 # ---- 参数解析 ----
 NAME=""
-STACK="bare"
+STACK=""              # 空 = "用户没显式指定" — --here 模式下会先跑 detect
+STACK_DEFAULT="bare"  # 非 --here 模式下，未指定 --stack 的默认值
 HERE=false
 NO_GIT=false
 NO_INIT=false
@@ -85,6 +86,27 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "${NAME}" ]] && { warn "缺少项目名"; usage 2; }
+
+# --here 且未指定 --stack：先跑 detect 给建议，不动文件
+if $HERE && [[ -z "${STACK}" ]]; then
+  echo ""
+  log "${C_BLD}--here 模式且未指定 --stack：先扫描你的项目结构${C_OFF}"
+  echo ""
+  bash "$(dirname "${BASH_SOURCE[0]}")/pl-detect.sh" "$PWD" || true
+  echo ""
+  echo "${C_BLD}下一步:${C_OFF}"
+  echo "  1) 看上面建议，决定要装哪个 stack"
+  echo "  2) 重跑加 --stack 明确选择，例:"
+  echo "     ${C_GRN}pl new ${NAME} --here --stack bare${C_OFF}      # 只装 pl 骨架（推荐用于已有项目）"
+  echo "     ${C_GRN}pl new ${NAME} --here --stack fastapi${C_OFF}   # 装 fastapi adapter"
+  echo "     ${C_GRN}pl new ${NAME} --here --stack nextjs${C_OFF}    # 装 nextjs adapter"
+  echo ""
+  echo "${C_DIM}本命令只读：没有写任何文件。${C_OFF}"
+  exit 0
+fi
+
+# 没指定 stack 且非 --here：用默认值
+[[ -z "${STACK}" ]] && STACK="${STACK_DEFAULT}"
 
 # 校验 stack
 case "${STACK}" in
