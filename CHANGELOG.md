@@ -33,6 +33,97 @@
 > 🔎 **2026-04-24 v1.7.3**：CDC drill-down——v1.7.2 的角标从"红或绿"升级为"点进去看哪里红"。
 > 点首页角标 → 跳到 change 详情页 Contract 卡片，每条 violation 显示完整 reason
 > 和源文件绝对路径（一键复制丢进 IDE 跳转）。从 visibility 到 actionability。
+>
+> 🛠 **2026-04-24 v1.8.0**：统一 CLI 收口——`bin/pl` 一个入口替代 34 个散落的
+> `bash $PL_HOME/scripts/*.sh`。命名空间归口（`pl contract|trace|adapter|piao|...`），
+> 修掉 README 长期画饼的 `pl proposal/plan/report` 文档欺诈，老路径 100% 向后兼容。
+
+---
+
+## [1.8.0] — 2026-04-24 · 统一 CLI 收口 🛠
+
+### 背景
+
+到 v1.7.3 为止，scripts/ 已经有 **34 个独立 .sh 脚本**（`pl-*` 24 个，`piao-*` 6 个，`adapter-*` 3 个，`trace-*` 3 个，其它 8 个）。
+README 顶部一直写 `pl proposal` / `pl plan` / `pl report` 风格用法，但**这些命令根本不存在**——
+新用户照 README 试一下 `pl proposal` 就拿到 `command not found`，心智断崖。
+v1.8 做"thin wrapper 收口"：dispatcher 0 业务逻辑，纯路由。
+
+### 新增
+
+- `bin/pl` — 统一 CLI dispatcher
+  - 顶层命令：`init / status / run / phase / orchestrator / smoke / dashboard / observe / active-time / retro-mine / rule-scan / migrate-legacy / should-build / setup-hooks / log-error`
+  - 命名空间：`pl contract <verb>` / `pl trace <verb>` / `pl adapter <verb>` / `pl piao <verb>` / `pl dashboard [refresh]` / `pl observe [check]`
+  - 元命令：`pl --version` / `pl env` / `pl doctor` / `pl help [<sub>]`
+  - 所有 flag 透传给底层脚本 → `pl run --change foo --gate D --json` ≡ `bash scripts/pl-runner.sh --change foo --gate D --json`
+  - 退出码透传；未知子命令 → exit 2 + 友好提示
+  - macOS bash 3.2 兼容（已修一处 set -u 下中文标点贪婪解析的坑：`$cmd（...)` → `${cmd}（...)`）
+- `pl doctor` 自检：PATH / python3 / jq / yq / `$PL_HOME` / `$PL_PROJECT/pl/changes`
+- `docs/cli-reference.md` — 完整子命令 → 底层脚本对照表 + 设计约定 + 食谱
+
+### 修复（文档欺诈）
+
+- README 顶部 badge: `v1.2.0 → v1.8.0`
+- 痛点表里的伪命令 `pl proposal` / `pl plan` 改成真实存在的 `pl init <id>` / `pl run --gate B1`
+- "30 秒上手" 整段改成 `pl <subcmd>` 风格，加 `export PATH="$PL_HOME/bin:$PATH"` + `pl doctor`
+- `pl report` → `pl trace report --page <id>`（前者一直是空话）
+- v2.0 愿景段加注释，明确哪些是已实现、哪些是 v2.0 规划
+
+### 验证
+
+```
+================ pl --version ================
+pl-pipeline 1.8.0
+  PL_HOME = /.../pl-pipeline-standalone
+
+================ pl doctor ================
+[路径]    PL_HOME / PATH 包含 $PL_HOME/bin    OK
+[依赖]    bash python3 jq                       OK
+[版本]    pl-pipeline = 1.8.0
+✓ doctor: 关键项全部通过
+
+================ 错误处理 ================
+$ pl bogus
+pl: 未知子命令: bogus（用 'pl help' 看清单）
+exit=2
+
+$ pl contract bogus
+pl: 未知 contract verb: bogus（aggregate|verify|query）
+exit=2
+
+================ 透传 ================
+$ pl status --json | head -3
+{ "schema_version": "pl-status-v1", ... }
+exit=0
+
+$ pl contract verify --help | head -3
+pl-contract-verify.sh — 拿 consumer pacts 对账当前 adapter.yaml ...
+exit=0
+```
+
+### 文件变更
+
+| 文件 | 变更类型 |
+|---|---|
+| `bin/pl` | 新增（dispatcher，280 行） |
+| `docs/cli-reference.md` | 新增（完整 CLI 文档） |
+| `README.md` | 修订 6 处（badge / 痛点表 / 30 秒上手 / v2.0 段 / pl report / adapter 段） |
+| `VERSION` | `1.5.0` → `1.8.0`（顺手修正历史漏更新：v1.6/v1.7 都没改过 VERSION） |
+| `CHANGELOG.md` | 加 v1.8.0 段 |
+
+### 已知边界
+
+- dispatcher **不为伪命令兜底**：`pl proposal` 仍然报"未知子命令"，因为当前没有对应脚本。
+  这是有意为之，避免造"假装能用"的入口。等 v2.0 阶段语义糖落地再说。
+- VERSION 文件一直停在 `1.5.0` 直到 v1.8 才同步，是一个长期债。
+  本次顺手修，后续 `pl-pipeline-master` agent 应把"打 tag 必同时改 VERSION"也纳入纪律。
+- `pl-status.sh` 在某些路径有 `dirs[@]: unbound variable` 旧 bug（与 dispatcher 无关），
+  不在本次范围；后续单独 patch。
+
+### 向后兼容
+
+100%。`bash $PL_HOME/scripts/<x>.sh ...` 全部继续工作。
+CI、agent prompt、第三方集成无须立刻迁移。
 
 ---
 

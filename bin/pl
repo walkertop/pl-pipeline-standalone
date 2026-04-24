@@ -1,0 +1,364 @@
+#!/usr/bin/env bash
+# =============================================================================
+# bin/pl — pl-pipeline 统一 CLI 入口（v1.8.0）
+# =============================================================================
+#
+# 把 scripts/ 下数十个脚本收口成 `pl <subcmd> [args...]` 风格。
+# 本身只做路由：解析子命令 → 透传所有参数 → exec 对应脚本。
+#
+# 安装/启用:
+#   export PL_HOME="/path/to/pl-pipeline-standalone"
+#   export PATH="$PL_HOME/bin:$PATH"
+#   pl --version
+#   pl help
+#
+# 设计原则:
+#   1. 零业务逻辑 — dispatcher 不解析 flag，全部透传给底层脚本
+#   2. 向后兼容 — scripts/*.sh 路径仍然可用，本 CLI 是表层语义糖
+#   3. 不造伪命令 — 没有对应脚本的子命令直接报错，不"假装"实现
+#   4. 命名空间分组 — contract / trace / adapter / piao / dashboard 走二级动词
+#
+# 退出码:
+#   0   子命令成功
+#   1   子命令失败（透传）
+#   2   未知子命令 / 缺参数
+#   127 脚本文件丢失
+#
+# =============================================================================
+
+set -uo pipefail
+
+# ---- 解析 PL_HOME ------------------------------------------------------------
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PL_HOME="${PL_HOME:-$(cd "$SELF_DIR/.." && pwd)}"
+export PL_HOME
+SCRIPTS="$PL_HOME/scripts"
+
+# ---- 颜色 -------------------------------------------------------------------
+if [[ -t 1 ]]; then
+  C_RED=$'\033[0;31m'; C_GRN=$'\033[0;32m'; C_YEL=$'\033[0;33m'
+  C_BLU=$'\033[0;34m'; C_DIM=$'\033[2m'; C_BLD=$'\033[1m'; C_OFF=$'\033[0m'
+else
+  C_RED=; C_GRN=; C_YEL=; C_BLU=; C_DIM=; C_BLD=; C_OFF=
+fi
+
+# ---- 工具函数 ----------------------------------------------------------------
+_pl_die() {
+  echo "${C_RED}pl:${C_OFF} $*" >&2
+  exit 2
+}
+
+# 透传执行 scripts/<name>.sh 与剩余参数
+_pl_exec() {
+  local script="$SCRIPTS/$1"
+  shift
+  if [[ ! -f "$script" ]]; then
+    echo "${C_RED}pl:${C_OFF} 内部错误，脚本缺失: $script" >&2
+    exit 127
+  fi
+  exec bash "$script" "$@"
+}
+
+# ---- 帮助 -------------------------------------------------------------------
+_pl_version() {
+  local v="dev"
+  [[ -f "$PL_HOME/VERSION" ]] && v="$(tr -d '[:space:]' < "$PL_HOME/VERSION")"
+  echo "pl-pipeline ${v}"
+  echo "  PL_HOME = $PL_HOME"
+}
+
+_pl_help_main() {
+  cat <<EOF
+${C_BLD}pl${C_OFF} — pl-pipeline 统一 CLI
+
+${C_BLD}用法:${C_OFF}
+  pl <subcmd> [args...]
+  pl help [<subcmd>]
+  pl --version | --help
+
+${C_BLD}核心命令:${C_OFF}
+  ${C_GRN}init${C_OFF}             创建 change 骨架（.state.md + workflow.start 事件）
+  ${C_GRN}status${C_OFF}           查看 pipeline 状态（人读表 / --json / --self-check）
+  ${C_GRN}run${C_OFF}              执行 gate / check（统一执行器）
+  ${C_GRN}phase${C_OFF}            手动推进阶段并写 trace 事件
+  ${C_GRN}orchestrator${C_OFF}     Agentic workflow 全流程编排
+  ${C_GRN}dashboard${C_OFF}        启动可视化面板（live SSE）
+  ${C_GRN}smoke${C_OFF}            一键端到端冒烟测试
+
+${C_BLD}观测 / trace:${C_OFF}
+  ${C_GRN}observe${C_OFF}          fs watcher（artifact.* 事件）
+  ${C_GRN}observe check${C_OFF}    quality_score / 缺口统计
+  ${C_GRN}trace use${C_OFF}        记录 adapter 能力消费（CDC 事件源）
+  ${C_GRN}trace tree${C_OFF}       事件树可视化
+  ${C_GRN}trace report${C_OFF}     生成 HTML 报告
+  ${C_GRN}active-time${C_OFF}      事件密度估算的 active_time
+
+${C_BLD}契约 (CDC, v1.7+):${C_OFF}
+  ${C_GRN}contract aggregate${C_OFF}  聚合 adapter.use 事件 → consumer-pact
+  ${C_GRN}contract verify${C_OFF}     对账：satisfied / warn / broken
+  ${C_GRN}contract query${C_OFF}      反查：谁在用某 capability/skill/rule
+
+${C_BLD}Adapter:${C_OFF}
+  ${C_GRN}adapter create${C_OFF}      脚手架新 adapter
+  ${C_GRN}adapter validate${C_OFF}    校验 adapter.yaml 与目录结构
+  ${C_GRN}adapter install${C_OFF}     安装 adapter 到当前项目
+
+${C_BLD}快照 / 内核演进 (piao 系列):${C_OFF}
+  ${C_GRN}piao snapshot-produce${C_OFF}  抓取代码快照
+  ${C_GRN}piao snapshot-diff${C_OFF}     比较快照差异
+  ${C_GRN}piao drift-compute${C_OFF}     计算漂移指标
+  ${C_GRN}piao contract-drift${C_OFF}    契约漂移指标
+  ${C_GRN}piao evolution-scan${C_OFF}    内核演进扫描
+  ${C_GRN}piao kernel-wordcheck${C_OFF}  内核词表校验
+
+${C_BLD}工程辅助:${C_OFF}
+  ${C_GRN}retro-mine${C_OFF}            离线 trace 挖掘 → 候选规则
+  ${C_GRN}rule-scan${C_OFF}             rules 资产扫描
+  ${C_GRN}migrate-legacy${C_OFF}        旧版结构迁移
+  ${C_GRN}should-build${C_OFF}          变更感知自动构建触发判断
+  ${C_GRN}setup-hooks${C_OFF}           安装 git hooks
+  ${C_GRN}log-error${C_OFF}             快速记录错误条目
+  ${C_GRN}dashboard refresh${C_OFF}     仅刷新 dashboard 数据，不起 server
+
+${C_BLD}元命令:${C_OFF}
+  ${C_GRN}version${C_OFF}, --version     打印版本与 PL_HOME
+  ${C_GRN}env${C_OFF}                    打印所有 PL_* 环境变量
+  ${C_GRN}doctor${C_OFF}                 自检：python3 / yq / jq / 路径
+  ${C_GRN}help${C_OFF} [<sub>]           本帮助 / 透传 <sub> 的 --help
+
+${C_DIM}所有 flag 透传给底层脚本。任意子命令均可加 -h / --help 查详细。
+脚本物理路径：\$PL_HOME/scripts/${C_OFF}
+EOF
+}
+
+# 把 subcmd 翻译成对应脚本名，让 `pl help <sub>` 透传 --help
+_pl_subcmd_to_script() {
+  case "$1" in
+    init)               echo "pl-state-init.sh" ;;
+    status)             echo "pl-status.sh" ;;
+    run)                echo "pl-runner.sh" ;;
+    phase)              echo "pl-phase.sh" ;;
+    orchestrator)       echo "pipeline-orchestrator.sh" ;;
+    dashboard)          echo "pl-dashboard.sh" ;;
+    smoke)              echo "pl-smoke.sh" ;;
+    observe)            echo "pl-observe.sh" ;;
+    active-time)        echo "pl-active-time.sh" ;;
+    retro-mine)         echo "pl-retro-miner.sh" ;;
+    rule-scan)          echo "pl-rule-scan.sh" ;;
+    migrate-legacy)     echo "pl-migrate-legacy.sh" ;;
+    should-build)       echo "should-build.sh" ;;
+    setup-hooks)        echo "setup-hooks.sh" ;;
+    log-error)          echo "log-error.sh" ;;
+    *)                  echo "" ;;
+  esac
+}
+
+# ---- doctor -----------------------------------------------------------------
+_pl_doctor() {
+  local rc=0
+  echo "${C_BLD}pl doctor${C_OFF}"
+  echo ""
+  echo "${C_BLD}[路径]${C_OFF}"
+  printf "  PL_HOME      = %s  " "$PL_HOME"
+  if [[ -d "$PL_HOME/scripts" ]]; then echo "${C_GRN}OK${C_OFF}"; else echo "${C_RED}MISSING${C_OFF}"; rc=1; fi
+  printf "  PL_PROJECT   = %s  " "${PL_PROJECT:-$PWD}"
+  if [[ -d "${PL_PROJECT:-$PWD}/pl/changes" ]]; then echo "${C_GRN}OK${C_OFF}"; else echo "${C_YEL}no pl/changes/ in PL_PROJECT (ok if you're outside a host project)${C_OFF}"; fi
+  printf "  PATH 包含 \$PL_HOME/bin  "
+  case ":$PATH:" in *":$PL_HOME/bin:"*) echo "${C_GRN}OK${C_OFF}";; *) echo "${C_YEL}NO — 建议 export PATH=\"\$PL_HOME/bin:\$PATH\"${C_OFF}";; esac
+
+  echo ""
+  echo "${C_BLD}[依赖]${C_OFF}"
+  for tool in bash python3 jq yq; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      printf "  %-8s %s  ${C_GRN}OK${C_OFF}\n" "$tool" "$(command -v $tool)"
+    else
+      case "$tool" in
+        bash|python3) printf "  %-8s ${C_RED}MISSING (必需)${C_OFF}\n" "$tool"; rc=1 ;;
+        *)            printf "  %-8s ${C_YEL}MISSING (可选, 部分子命令需要)${C_OFF}\n" "$tool" ;;
+      esac
+    fi
+  done
+
+  echo ""
+  echo "${C_BLD}[版本]${C_OFF}"
+  if [[ -f "$PL_HOME/VERSION" ]]; then
+    echo "  pl-pipeline = $(tr -d '[:space:]' < "$PL_HOME/VERSION")"
+  else
+    echo "  pl-pipeline = ${C_YEL}VERSION 文件缺失${C_OFF}"
+  fi
+
+  echo ""
+  if [[ $rc -eq 0 ]]; then
+    echo "${C_GRN}✓ doctor: 关键项全部通过${C_OFF}"
+  else
+    echo "${C_RED}✗ doctor: 有关键项失败，见上${C_OFF}"
+  fi
+  return $rc
+}
+
+# ---- env --------------------------------------------------------------------
+_pl_env() {
+  # shellcheck disable=SC1091
+  source "$SCRIPTS/_env.sh"
+  pl_env_dump
+}
+
+# ---- 主分发 -----------------------------------------------------------------
+if [[ $# -eq 0 ]]; then
+  _pl_help_main
+  exit 0
+fi
+
+cmd="$1"
+shift
+
+case "$cmd" in
+  -h|--help|help)
+    if [[ $# -eq 0 ]]; then
+      _pl_help_main
+      exit 0
+    fi
+    sub="$1"; shift || true
+    # help <sub> [<verb>]：翻译后透传 -h
+    case "$sub" in
+      contract|trace|adapter|piao|dashboard|observe)
+        if [[ $# -eq 0 ]]; then
+          echo "用法: pl $sub <verb> [args...]"
+          echo "用 'pl help' 看可用 verb。"
+          exit 0
+        fi
+        verb="$1"; shift || true
+        # 走主入口的逻辑解析出脚本
+        case "$sub:$verb" in
+          contract:aggregate) _pl_exec pl-contract-aggregate.sh --help ;;
+          contract:verify)    _pl_exec pl-contract-verify.sh --help ;;
+          contract:query)     _pl_exec pl-contract-query.sh --help ;;
+          trace:use)          _pl_exec trace-adapter-use.sh --help ;;
+          trace:tree)         _pl_exec pl-trace-tree.sh --help ;;
+          trace:report)       _pl_exec trace-report.sh --help ;;
+          adapter:create)     _pl_exec adapter-create.sh --help ;;
+          adapter:install)    _pl_exec adapter-install.sh --help ;;
+          adapter:validate)   _pl_exec adapter-validate.sh --help ;;
+          piao:snapshot-produce)  _pl_exec piao-snapshot-produce.sh --help ;;
+          piao:snapshot-diff)     _pl_exec piao-snapshot-diff.sh --help ;;
+          piao:drift-compute)     _pl_exec piao-drift-compute.sh --help ;;
+          piao:contract-drift)    _pl_exec piao-contract-drift-compute.sh --help ;;
+          piao:evolution-scan)    _pl_exec piao-evolution-scan.sh --help ;;
+          piao:kernel-wordcheck)  _pl_exec piao-kernel-wordcheck.sh --help ;;
+          dashboard:refresh)      _pl_exec pl-dashboard-refresh.sh --help ;;
+          observe:check)          _pl_exec pl-observe-check.sh --help ;;
+          *) _pl_die "未知子命令: pl ${sub} ${verb}（用 'pl help' 看清单）" ;;
+        esac
+        ;;
+      *)
+        target="$(_pl_subcmd_to_script "$sub")"
+        if [[ -z "$target" ]]; then
+          _pl_die "未知子命令: pl ${sub}（用 'pl help' 看清单）"
+        fi
+        _pl_exec "$target" --help
+        ;;
+    esac
+    ;;
+
+  -v|--version|version)
+    _pl_version
+    ;;
+
+  env)
+    _pl_env
+    ;;
+
+  doctor)
+    _pl_doctor
+    ;;
+
+  # ---- 命名空间：contract ------------------------------------------------
+  contract)
+    [[ $# -eq 0 ]] && _pl_die "缺少子动词。用法: pl contract <aggregate|verify|query> [args...]"
+    verb="$1"; shift
+    case "$verb" in
+      aggregate)  _pl_exec pl-contract-aggregate.sh "$@" ;;
+      verify)     _pl_exec pl-contract-verify.sh    "$@" ;;
+      query)      _pl_exec pl-contract-query.sh     "$@" ;;
+      *)          _pl_die "未知 contract verb: ${verb}（aggregate|verify|query）" ;;
+    esac
+    ;;
+
+  # ---- 命名空间：trace ----------------------------------------------------
+  trace)
+    [[ $# -eq 0 ]] && _pl_die "缺少子动词。用法: pl trace <use|tree|report> [args...]"
+    verb="$1"; shift
+    case "$verb" in
+      use)        _pl_exec trace-adapter-use.sh "$@" ;;
+      tree)       _pl_exec pl-trace-tree.sh     "$@" ;;
+      report)     _pl_exec trace-report.sh      "$@" ;;
+      *)          _pl_die "未知 trace verb: ${verb}（use|tree|report）" ;;
+    esac
+    ;;
+
+  # ---- 命名空间：adapter --------------------------------------------------
+  adapter)
+    [[ $# -eq 0 ]] && _pl_die "缺少子动词。用法: pl adapter <create|install|validate> [args...]"
+    verb="$1"; shift
+    case "$verb" in
+      create)     _pl_exec adapter-create.sh   "$@" ;;
+      install)    _pl_exec adapter-install.sh  "$@" ;;
+      validate)   _pl_exec adapter-validate.sh "$@" ;;
+      *)          _pl_die "未知 adapter verb: ${verb}（create|install|validate）" ;;
+    esac
+    ;;
+
+  # ---- 命名空间：piao -----------------------------------------------------
+  piao)
+    [[ $# -eq 0 ]] && _pl_die "缺少子动词。用法: pl piao <snapshot-produce|snapshot-diff|drift-compute|contract-drift|evolution-scan|kernel-wordcheck> [args...]"
+    verb="$1"; shift
+    case "$verb" in
+      snapshot-produce)   _pl_exec piao-snapshot-produce.sh         "$@" ;;
+      snapshot-diff)      _pl_exec piao-snapshot-diff.sh            "$@" ;;
+      drift-compute)      _pl_exec piao-drift-compute.sh            "$@" ;;
+      contract-drift)     _pl_exec piao-contract-drift-compute.sh   "$@" ;;
+      evolution-scan)     _pl_exec piao-evolution-scan.sh           "$@" ;;
+      kernel-wordcheck)   _pl_exec piao-kernel-wordcheck.sh         "$@" ;;
+      *)                  _pl_die "未知 piao verb: $verb" ;;
+    esac
+    ;;
+
+  # ---- 命名空间：dashboard ------------------------------------------------
+  dashboard)
+    if [[ $# -gt 0 && "$1" == "refresh" ]]; then
+      shift
+      _pl_exec pl-dashboard-refresh.sh "$@"
+    else
+      _pl_exec pl-dashboard.sh "$@"
+    fi
+    ;;
+
+  # ---- 命名空间：observe --------------------------------------------------
+  observe)
+    if [[ $# -gt 0 && "$1" == "check" ]]; then
+      shift
+      _pl_exec pl-observe-check.sh "$@"
+    else
+      _pl_exec pl-observe.sh "$@"
+    fi
+    ;;
+
+  # ---- 顶层 1:1 映射 ------------------------------------------------------
+  init)               _pl_exec pl-state-init.sh        "$@" ;;
+  status)             _pl_exec pl-status.sh            "$@" ;;
+  run)                _pl_exec pl-runner.sh            "$@" ;;
+  phase)              _pl_exec pl-phase.sh             "$@" ;;
+  orchestrator)       _pl_exec pipeline-orchestrator.sh "$@" ;;
+  smoke)              _pl_exec pl-smoke.sh             "$@" ;;
+  active-time)        _pl_exec pl-active-time.sh       "$@" ;;
+  retro-mine)         _pl_exec pl-retro-miner.sh       "$@" ;;
+  rule-scan)          _pl_exec pl-rule-scan.sh         "$@" ;;
+  migrate-legacy)     _pl_exec pl-migrate-legacy.sh    "$@" ;;
+  should-build)       _pl_exec should-build.sh         "$@" ;;
+  setup-hooks)        _pl_exec setup-hooks.sh          "$@" ;;
+  log-error)          _pl_exec log-error.sh            "$@" ;;
+
+  *)
+    _pl_die "未知子命令: ${cmd}（用 'pl help' 看清单）"
+    ;;
+esac
