@@ -280,6 +280,72 @@ _pl_env() {
   pl_env_dump
 }
 
+# ---- pl/config.yaml requires.pl_version 启动自检（v1.12+）-----------------
+# 行为：warn-only, 不阻塞执行；用于检测项目要求的 pl 版本和实际安装的差异
+#   - 仅在 PL_PROJECT/pl/config.yaml 存在且包含 requires.pl_version 时生效
+#   - PL_REQUIRE_CHECK=0 可关闭
+#   - 命令是 doctor / upgrade / version / help / detect / new / init 时跳过
+#     （这些命令本身就是用来排错和初始化的，不应被自检干扰）
+_pl_require_check() {
+  [[ "${PL_REQUIRE_CHECK:-1}" == "0" ]] && return 0
+  case "${1:-}" in
+    doctor|upgrade|version|--version|help|--help|-h|detect|new|init|env)
+      return 0 ;;
+  esac
+  # 解析 PL_PROJECT（与 _env.sh 一致）：优先环境变量, 否则当前目录上溯找 pl/config.yaml
+  local proj="${PL_PROJECT:-}"
+  if [[ -z "$proj" ]]; then
+    local d="$PWD"
+    while [[ "$d" != "/" ]]; do
+      if [[ -f "$d/pl/config.yaml" ]]; then proj="$d"; break; fi
+      d="$(dirname "$d")"
+    done
+  fi
+  [[ -z "$proj" ]] && return 0
+  local cfg="$proj/pl/config.yaml"
+  [[ -f "$cfg" ]] || return 0
+  # 用 grep + sed 提 requires.pl_version (避开 yaml 库依赖)
+  local req
+  req=$(awk '
+    /^requires:/ { in_req=1; next }
+    in_req && /^[^[:space:]]/ { in_req=0 }
+    in_req && /pl_version:/ {
+      sub(/.*pl_version:[[:space:]]*/, "")
+      gsub(/["\047]/, "")
+      gsub(/[[:space:]]+#.*/, "")
+      print; exit
+    }
+  ' "$cfg" 2>/dev/null | tr -d '[:space:]')
+  [[ -z "$req" ]] && return 0
+  local local_v
+  [[ -f "$PL_HOME/VERSION" ]] && local_v=$(tr -d '[:space:]' < "$PL_HOME/VERSION") || return 0
+  # 解析 ">=1.11" / ">1.10" / "1.10" / "^1.10" 这几种简单形式
+  local op="" want=""
+  if [[ "$req" =~ ^(\>=|\<=|==|\>|\<|\^|~|=)?(.*)$ ]]; then
+    op="${BASH_REMATCH[1]:->=}"
+    want="${BASH_REMATCH[2]}"
+  fi
+  [[ -z "$want" ]] && return 0
+  # SemVer 比较：^/~ 简化按 >= 处理（小项目场景够用）
+  case "$op" in ^|~|=) op=">=" ;; esac
+  local newest
+  newest=$(printf '%s\n%s\n' "$local_v" "$want" | sort -V 2>/dev/null | tail -1) || return 0
+  local cmp_ok=true
+  case "$op" in
+    ">="|"") [[ "$newest" == "$local_v" || "$want" == "$local_v" ]] || cmp_ok=false ;;
+    ">")     [[ "$newest" == "$local_v" && "$want" != "$local_v" ]] || cmp_ok=false ;;
+    "<=")    [[ "$newest" == "$want" || "$want" == "$local_v" ]] || cmp_ok=false ;;
+    "<")     [[ "$newest" == "$want" && "$want" != "$local_v" ]] || cmp_ok=false ;;
+    "==")    [[ "$want" == "$local_v" ]] || cmp_ok=false ;;
+  esac
+  if ! $cmp_ok; then
+    {
+      printf "${C_YEL}⚠ pl 版本不匹配${C_OFF}: 项目要求 ${C_BLD}%s${C_OFF}, 当前安装 ${C_BLD}%s${C_OFF}\n" "$req" "$local_v"
+      printf "  跑 ${C_BLD}pl upgrade${C_OFF} 升级 (设 PL_REQUIRE_CHECK=0 关闭本提示)\n"
+    } >&2
+  fi
+}
+
 # ---- 主分发 -----------------------------------------------------------------
 if [[ $# -eq 0 ]]; then
   _pl_help_main
@@ -288,6 +354,9 @@ fi
 
 cmd="$1"
 shift
+
+# 启动自检（warn-only, 不影响 exit code）
+_pl_require_check "$cmd"
 
 case "$cmd" in
   -h|--help|help)

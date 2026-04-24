@@ -88,10 +88,20 @@ done
 
 [[ -z "$CHANGE" ]] && { log_error "--change is required"; exit 2; }
 
-# 规则根目录：adapter-install 把 rule 注入到 .codebuddy/rules/
-RULES_DIR="$PL_PROJECT/.codebuddy/rules"
-if [[ ! -d "$RULES_DIR" ]]; then
-  log_warn "no .codebuddy/rules/ under $PL_PROJECT — nothing to scan"
+# 规则根目录：v1.12 起 adapter-install 同时写 canonical pl/.adapter/rules 和 legacy .codebuddy/rules
+# 三层资产栈解析：项目层 > adapter 层 > legacy（兼容 v1.11 及以前）
+RULES_DIR=""
+for cand in \
+    "$PL_PROJECT/pl/rules" \
+    "$PL_PROJECT/pl/.adapter/rules" \
+    "$PL_PROJECT/.codebuddy/rules"; do
+  if [[ -d "$cand" ]] && find "$cand" -maxdepth 1 -type f -name '*.md' | grep -q .; then
+    RULES_DIR="$cand"
+    break
+  fi
+done
+if [[ -z "$RULES_DIR" ]]; then
+  log_warn "no rules dir found (tried pl/rules, pl/.adapter/rules, .codebuddy/rules) under $PL_PROJECT — nothing to scan"
   trace_init "$CHANGE" "OBSERVE" "script:pl-rule-scan"
   trace_emit "pl.rule_scan.skipped" '{"reason":"no_rules_dir"}'
   $JSON_OUT && echo '{"result":"skipped","reason":"no_rules_dir"}'

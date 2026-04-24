@@ -369,6 +369,151 @@ fi
 rm -rf "$TMPDIR_IDE"
 
 # ----------------------------------------------------------------------
+# Suite 8: pl ide — Claude / Codex (v1.12.0)
+# ----------------------------------------------------------------------
+tc_suite "ide-sync-v1.12"
+
+tc_case "ide-integrations/ 目录包含 4 个内置 IDE manifest"
+TC_CURRENT_CASE="ide-integrations contains claude+codex+codebuddy+cursor"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+ok=true
+for ide in claude codex codebuddy cursor; do
+  [[ -f "$REPO_ROOT/ide-integrations/$ide/manifest.yaml" ]] || ok=false
+done
+if $ok; then
+  tc_ok
+else
+  tc_fail "missing one of ide-integrations/{claude,codex,codebuddy,cursor}/manifest.yaml"
+fi
+
+tc_case "pl ide sync --ide claude 写入 .claude/ + CLAUDE.md"
+TMPDIR_IDE=$(mktemp -d)
+mkdir -p "$TMPDIR_IDE/.claude"
+set +e
+(cd "$TMPDIR_IDE" && "$PL" ide sync --ide claude >/dev/null 2>&1)
+rc=$?
+set -e
+TC_CURRENT_CASE="claude sync writes .claude/ + CLAUDE.md"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+n_cmds=$(ls "$TMPDIR_IDE/.claude/commands/pl/" 2>/dev/null | wc -l | tr -d ' ')
+n_agents=$(ls "$TMPDIR_IDE/.claude/agents/" 2>/dev/null | wc -l | tr -d ' ')
+if [[ $rc -eq 0 && $n_cmds -ge 1 && $n_agents -ge 1 ]] \
+   && [[ -f "$TMPDIR_IDE/CLAUDE.md" ]] \
+   && grep -q "pl-pipeline:claude" "$TMPDIR_IDE/CLAUDE.md"; then
+  tc_ok
+else
+  tc_fail "rc=$rc cmds=$n_cmds agents=$n_agents; CLAUDE.md present? $([[ -f "$TMPDIR_IDE/CLAUDE.md" ]] && echo y || echo n)"
+fi
+rm -rf "$TMPDIR_IDE"
+
+tc_case "pl ide sync --ide codex 仅写 AGENTS.md（不复制目录）"
+TMPDIR_IDE=$(mktemp -d)
+mkdir -p "$TMPDIR_IDE/.codex"
+set +e
+(cd "$TMPDIR_IDE" && "$PL" ide sync --ide codex >/dev/null 2>&1)
+rc=$?
+set -e
+TC_CURRENT_CASE="codex sync only updates AGENTS.md"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+# 不应该有 .codex/{commands,agents,rules,skills} 目录
+nothing_copied=true
+for d in commands agents rules skills; do
+  [[ -d "$TMPDIR_IDE/.codex/$d" ]] && nothing_copied=false
+done
+if [[ $rc -eq 0 ]] && $nothing_copied \
+   && [[ -f "$TMPDIR_IDE/AGENTS.md" ]] \
+   && grep -q "pl-pipeline:codex" "$TMPDIR_IDE/AGENTS.md"; then
+  tc_ok
+else
+  tc_fail "rc=$rc, copied=$([ "$nothing_copied" = true ] && echo none || echo some); AGENTS.md present? $([[ -f "$TMPDIR_IDE/AGENTS.md" ]] && echo y || echo n)"
+fi
+rm -rf "$TMPDIR_IDE"
+
+tc_case "pl ide sync 4 IDE 共存 不互相覆盖"
+TMPDIR_IDE=$(mktemp -d)
+mkdir -p "$TMPDIR_IDE"/.{cursor,codebuddy,claude,codex}
+set +e
+(cd "$TMPDIR_IDE" && "$PL" ide sync >/dev/null 2>&1)
+set -e
+TC_CURRENT_CASE="all 4 IDE managed sections coexist in AGENTS.md/CLAUDE.md"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if grep -q "pl-pipeline:cursor"   "$TMPDIR_IDE/AGENTS.md" \
+   && grep -q "pl-pipeline:codebuddy" "$TMPDIR_IDE/AGENTS.md" \
+   && grep -q "pl-pipeline:codex"     "$TMPDIR_IDE/AGENTS.md" \
+   && grep -q "pl-pipeline:claude"    "$TMPDIR_IDE/CLAUDE.md"; then
+  tc_ok
+else
+  tc_fail "missing one of the 4 managed sections"
+fi
+rm -rf "$TMPDIR_IDE"
+
+# ----------------------------------------------------------------------
+# Suite 9: requires.pl_version 启动自检 (v1.12.0)
+# ----------------------------------------------------------------------
+tc_suite "require-check"
+
+tc_case "pl/config.yaml requires.pl_version 不匹配应 stderr 警告"
+TMPDIR_REQ=$(mktemp -d)
+mkdir -p "$TMPDIR_REQ/pl"
+cat > "$TMPDIR_REQ/pl/config.yaml" <<'YML'
+version: pl@v1.1
+namespace: pl
+requires:
+  pl_version: ">=99.0"
+YML
+set +e
+err=$(cd "$TMPDIR_REQ" && "$PL" status 2>&1 1>/dev/null)
+set -e
+TC_CURRENT_CASE="requires.pl_version mismatch warns on stderr"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ "$err" == *"版本不匹配"* ]]; then
+  tc_ok
+else
+  tc_fail "expected 版本不匹配; got: $err"
+fi
+rm -rf "$TMPDIR_REQ"
+
+tc_case "PL_REQUIRE_CHECK=0 关闭自检"
+TMPDIR_REQ=$(mktemp -d)
+mkdir -p "$TMPDIR_REQ/pl"
+cat > "$TMPDIR_REQ/pl/config.yaml" <<'YML'
+version: pl@v1.1
+namespace: pl
+requires:
+  pl_version: ">=99.0"
+YML
+set +e
+err=$(cd "$TMPDIR_REQ" && PL_REQUIRE_CHECK=0 "$PL" status 2>&1 1>/dev/null)
+set -e
+TC_CURRENT_CASE="PL_REQUIRE_CHECK=0 silences warning"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ "$err" != *"版本不匹配"* ]]; then
+  tc_ok
+else
+  tc_fail "PL_REQUIRE_CHECK=0 should silence; got: $err"
+fi
+rm -rf "$TMPDIR_REQ"
+
+tc_case "doctor 命令本身不被 requires 检查干扰"
+TMPDIR_REQ=$(mktemp -d)
+mkdir -p "$TMPDIR_REQ/pl"
+cat > "$TMPDIR_REQ/pl/config.yaml" <<'YML'
+requires:
+  pl_version: ">=99.0"
+YML
+set +e
+err=$(cd "$TMPDIR_REQ" && "$PL" doctor 2>&1 1>/dev/null)
+set -e
+TC_CURRENT_CASE="doctor skips requires self-check"
+printf '  %s· %s%s ... ' "$TC_DIM" "$TC_CURRENT_CASE" "$TC_RST"
+if [[ "$err" != *"版本不匹配"* ]]; then
+  tc_ok
+else
+  tc_fail "doctor should NOT trigger self-check; got: $err"
+fi
+rm -rf "$TMPDIR_REQ"
+
+# ----------------------------------------------------------------------
 # Final summary
 # ----------------------------------------------------------------------
 tc_summary

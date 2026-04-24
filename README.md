@@ -254,11 +254,28 @@ SPEC ──A0──▶ PLAN ──B1──▶ IMPLEMENT ──C/D──▶ VERIF
 > **多模块 monorepo 接入** → 见 [`docs/guides/monorepo-quickstart.md`](./docs/guides/monorepo-quickstart.md) +
 > 可跑示例 [`examples/demo-monorepo-trio/`](./examples/demo-monorepo-trio/)（前端 + Python 服务端 + 爬虫三模块完整骨架）。
 
-### 🔌 多 IDE 接入
+### 🔌 多 IDE 接入（`pl ide`，v1.11+）
 
-v1.10 通过 adapter 的 `rules/` / `agents/` / `skills/` 资产被任何读
-`.codebuddy/` / `.cursor/` / `.claude/` / `.codex/` 的 AI IDE 消费。
-不需要专门的 MCP server——ARCHIVE 阶段沉淀的资产会被各 IDE 自动加载。
+`pl-pipeline` 把 commands / rules / agents / skills 存为单源 (`pl/`)，
+`pl ide sync` 按各 IDE 约定 fan-out。**当前支持 4 个 IDE**：
+
+| IDE        | sync 后产物                          | 注册入口      |
+| ---------- | ------------------------------------ | ------------- |
+| Cursor     | `.cursor/{commands,rules}/`          | `AGENTS.md`   |
+| CodeBuddy  | `.codebuddy/{commands,rules,agents}/`| `AGENTS.md`   |
+| Claude Code| `.claude/{commands,agents}/`         | `CLAUDE.md`   |
+| Codex CLI  | 不复制（reference-only）             | `AGENTS.md`   |
+
+```bash
+cd your-project/
+pl ide detect            # 看一眼检测到哪些 IDE
+pl ide sync              # fan-out 资产
+pl ide unsync --ide claude   # 只撤掉 Claude
+```
+
+特性：命名前缀 `pl-` 隔离、SHA256 hash 保护用户手改、每 IDE 独立 `AGENTS.md`
+段落、装 adapter 后 `--ide-sync` 一键联动。完整说明见
+[`docs/ide-integration.md`](./docs/ide-integration.md)。
 
 ### 🏗️ 构建/测试适配层
 

@@ -1,0 +1,70 @@
+# =============================================================================
+# Claude Code 集成 manifest（pl-pipeline v1.12.0+）
+# =============================================================================
+#
+# Claude Code 是 Anthropic 官方的 IDE/CLI 工具。它的约定与 Cursor / CodeBuddy
+# 都不一样，主要区别：
+#   - 没有 rules/ 概念（系统提示走根目录的 CLAUDE.md）
+#   - skills 是目录形式 (.claude/skills/<name>/SKILL.md)，不是单文件
+#   - commands 在 .claude/commands/ 下，支持 frontmatter（与 codebuddy 类似）
+#   - agents 在 .claude/agents/ 下
+#
+# 同步策略：
+#   - commands → 复制到 .claude/commands/pl/, 复用 codebuddy 模板（带 frontmatter）
+#   - agents   → 复制到 .claude/agents/, 加 pl- 前缀
+#   - rules    → 不复制（Claude Code 没有 rules 子目录），通过根 CLAUDE.md 引用
+#   - skills   → 不复制（v1.12 暂不处理目录型 skill），引用模式
+#   - 根 CLAUDE.md（不是 AGENTS.md）维护一段 pl 管理区
+#
+# v1.13 计划：补 skills 目录型同步（需要把 pl/skills/<name>.md 包装成
+# .claude/skills/<name>/SKILL.md, 加 YAML frontmatter）。
+# =============================================================================
+ide_id: claude
+display_name: Claude Code
+
+detect:
+  any_of:
+    - .claude
+    - CLAUDE.md
+
+sync:
+  commands:
+    enabled: true
+    source: ide-integrations/codebuddy/commands/pl
+    target: .claude/commands/pl
+    target_ext: .md
+    name_prefix: ""
+    strip_frontmatter: false                          # Claude 支持 frontmatter
+
+  rules:
+    enabled: false                                    # Claude Code 无 rules/ 子目录
+    note: "Rules 通过根 CLAUDE.md 引用 pl/rules/*.md"
+    source_chain:
+      - "{PL_PROJECT}/pl/rules"
+      - "{PL_PROJECT}/pl/.adapter/rules"
+      - "{PL_HOME}/assets/pl/rules"
+
+  agents:
+    enabled: true                                     # Claude Code subagent 体系
+    source_chain:
+      - "{PL_PROJECT}/pl/agents"
+      - "{PL_PROJECT}/pl/.adapter/agents"
+      - "{PL_HOME}/assets/pl/agents"
+    target: .claude/agents
+    target_ext: .md
+    name_prefix: pl-
+    add_frontmatter: ""                               # 复制源里的 frontmatter
+
+  skills:
+    enabled: false                                    # 目录型 skill, v1.13 再做
+    note: "v1.12 暂不复制；用户用 @pl/skills/<name>.md 引用即可"
+    source_chain:
+      - "{PL_PROJECT}/pl/skills"
+      - "{PL_HOME}/assets/pl/skills"
+
+# Claude Code 用 CLAUDE.md 而非 AGENTS.md 做 system prompt 入口
+root_agents_md:
+  enabled: true
+  target_file: CLAUDE.md
+  marker_begin: "<!-- >>> pl-pipeline:claude managed section >>> -->"
+  marker_end: "<!-- <<< pl-pipeline:claude managed section <<< -->"

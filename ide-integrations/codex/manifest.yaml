@@ -1,0 +1,60 @@
+# =============================================================================
+# Codex CLI 集成 manifest（pl-pipeline v1.12.0+）
+# =============================================================================
+#
+# Codex（OpenAI Codex CLI 2026 版本）的约定相对极简：
+#   - 完全围绕根目录 AGENTS.md 工作（这是社区跨 IDE 通用约定）
+#   - 没有官方的 commands/agents/skills 子目录
+#   - 用户通过 @-mention 引用项目内任何 .md 文件
+#
+# 因此 Codex 的"同步"策略 = "什么都不复制, 只把 AGENTS.md 写好"。
+# pl/{rules,commands,agents,skills} 全部以 reference 形式列在 AGENTS.md
+# pl-pipeline:codex managed section 里, Codex 使用时按需 @-mention。
+#
+# 这种设计的好处：
+#   1. 完全不污染项目目录树（Codex 用户最常见的诉求）
+#   2. 跟 Codex 的"AGENTS.md as canonical"理念严丝合缝
+#   3. 用户切换其它 IDE 时, 只要起对应 detect 路径再 sync 一次, 复制操作即可
+# =============================================================================
+ide_id: codex
+display_name: Codex CLI
+
+detect:
+  any_of:
+    - .codex                                          # Codex CLI 创建的目录（如有）
+    # AGENTS.md 自身不作为 detect 标志（避免 cursor/codebuddy 没装 codex 时也命中）
+
+sync:
+  commands:
+    enabled: false                                    # Codex 无 slash command 概念
+    note: "通过 AGENTS.md 引用 pl/commands/* 让用户 @-mention"
+    source: ide-integrations/codebuddy/commands/pl
+
+  rules:
+    enabled: false
+    note: "AGENTS.md 引用 pl/rules/*"
+    source_chain:
+      - "{PL_PROJECT}/pl/rules"
+      - "{PL_PROJECT}/pl/.adapter/rules"
+      - "{PL_HOME}/assets/pl/rules"
+
+  agents:
+    enabled: false
+    note: "AGENTS.md 引用 pl/agents/*"
+    source_chain:
+      - "{PL_PROJECT}/pl/agents"
+      - "{PL_PROJECT}/pl/.adapter/agents"
+      - "{PL_HOME}/assets/pl/agents"
+
+  skills:
+    enabled: false
+    note: "AGENTS.md 引用 pl/skills/*"
+    source_chain:
+      - "{PL_PROJECT}/pl/skills"
+      - "{PL_HOME}/assets/pl/skills"
+
+root_agents_md:
+  enabled: true
+  target_file: AGENTS.md
+  marker_begin: "<!-- >>> pl-pipeline:codex managed section >>> -->"
+  marker_end: "<!-- <<< pl-pipeline:codex managed section <<< -->"

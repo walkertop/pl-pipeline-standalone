@@ -188,8 +188,16 @@ def _sync_section(
         if add_fm_template:
             body = _expand(add_fm_template, {"name": stem}) + body
 
+        # source_path 优先相对 PL_PROJECT (pl/.adapter/...), 其次相对 PL_HOME (内置 assets)
+        try:
+            src_rel = str(src.relative_to(pl_project))
+        except ValueError:
+            try:
+                src_rel = str(src.relative_to(pl_home))
+            except ValueError:
+                src_rel = str(src)
         marker = _build_marker(
-            source_path=str(src.relative_to(pl_home)),
+            source_path=src_rel,
             ide_id=ide_id,
             body_without_marker=body,
         )
@@ -262,7 +270,7 @@ def _build_agents_md_section(
     pl_home: Path,
     written_by_section: dict[str, list[str]],
 ) -> str:
-    """生成根 AGENTS.md 中由 pl 管理的那一段。"""
+    """生成 IDE 注册文件（根 AGENTS.md / CLAUDE.md / ...）里由 pl 管理的那一段。"""
     ide_id = manifest["ide_id"]
     lines: list[str] = []
     lines.append(f"## pl-pipeline ({ide_id})")
@@ -270,47 +278,55 @@ def _build_agents_md_section(
     lines.append("> 本节由 `pl ide sync` 自动生成，不要手工编辑（编辑请改 `pl/AGENTS.md`）。")
     lines.append("")
 
-    # rules / commands / agents 的当前总状态（扫描标记，不依赖本次写入数）
-    for section_name in ("rules", "commands", "agents"):
+    # 复制型：扫描目标目录里所有标了本 IDE pl-managed 的文件
+    for section_name in ("rules", "commands", "agents", "skills"):
         section = manifest.get("sync", {}).get(section_name, {})
         if not section.get("enabled"):
             continue
         target_dir = pl_project / section["target"]
         managed = _scan_managed(target_dir, ide_id)
         if managed:
-            lines.append(f"### {section_name}（{len(managed)} 个）")
+            lines.append(f"### {section_name}（{len(managed)} 个，复制）")
             for p in managed:
                 rel = p.relative_to(pl_project)
                 lines.append(f"- `{rel}`")
             lines.append("")
 
-    # 引用型：agents / skills 没有复制时也要在 AGENTS.md 列出来
-    for section_name in ("agents", "skills"):
+    # 引用型：所有 enabled=false 但 source 存在的 section
+    # 设计：只列项目内的 pl/<section>/ 路径（可移植）
+    #   如果项目还没 pl/<section>/, 给一行行动指引而不暴露 PL_HOME 绝对路径
+    for section_name in ("rules", "commands", "agents", "skills"):
         section = manifest.get("sync", {}).get(section_name, {})
-        if section.get("enabled"):
+        if not section or section.get("enabled"):
             continue
-        src = resolve_source_dir(section, pl_home, pl_project) if section else None
-        # fallback：找 pl/<section>
-        if src is None:
-            cand = pl_project / "pl" / section_name
-            if cand.exists():
-                src = cand
-        if src is None:
-            continue
-        files = sorted(
-            f for f in src.iterdir()
-            if f.is_file() and f.suffix == ".md" and not f.name.startswith("README")
-        )
-        if not files:
-            continue
-        lines.append(f"### {section_name}（引用模式，无复制）")
-        for f in files:
-            try:
-                rel = f.relative_to(pl_project)
-            except ValueError:
-                rel = f
-            lines.append(f"- `@{rel}`")
-        lines.append("")
+        # commands 在项目内通常没有；其它三类常见
+        project_dir_candidates = [pl_project / "pl" / section_name]
+        if section_name == "commands":
+            project_dir_candidates.append(pl_project / "pl" / "commands" / "pl")
+        chosen = next((c for c in project_dir_candidates if c.is_dir()), None)
+        if chosen is not None:
+            files = sorted(
+                f for f in chosen.rglob("*.md")
+                if not f.name.startswith("README")
+            )
+            if files:
+                lines.append(f"### {section_name}（{len(files)} 个，引用模式无复制）")
+                for f in files:
+                    rel = f.relative_to(pl_project)
+                    lines.append(f"- `@{rel}`")
+                lines.append("")
+                continue
+        # 项目内还没初始化, 但 PL_HOME 自带 → 给一行提示
+        builtin = resolve_source_dir(section, pl_home, pl_project)
+        if builtin is not None:
+            lines.append(
+                f"### {section_name}（项目未初始化，引用 pl 内置）"
+            )
+            lines.append(
+                f"> 跑 `cp -r $PL_HOME/assets/pl/{section_name} pl/{section_name}` "
+                f"把内置 {section_name} 拷入项目，下次 sync 会自动列出。"
+            )
+            lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
 
@@ -321,12 +337,14 @@ def _update_root_agents_md(
     new_section: str,
     dry_run: bool,
 ) -> None:
+    """更新 IDE 注册文件（默认 AGENTS.md, Claude 用 CLAUDE.md）。"""
     cfg = manifest.get("root_agents_md", {})
     if not cfg.get("enabled"):
         return
     begin = cfg["marker_begin"]
     end = cfg["marker_end"]
-    target = pl_project / "AGENTS.md"
+    target_file = cfg.get("target_file", "AGENTS.md")
+    target = pl_project / target_file
     block = f"{begin}\n{new_section}{end}\n"
 
     if target.exists():
@@ -341,9 +359,10 @@ def _update_root_agents_md(
             sep = "" if existing.endswith("\n") else "\n"
             new_content = existing + sep + "\n" + block
     else:
+        title = "Claude Code 入口" if target_file == "CLAUDE.md" else "AI Agents 入口"
         new_content = (
-            "# AGENTS.md\n\n"
-            "> 本项目使用 [pl-pipeline](https://github.com/) 管理 AI 工作流。\n"
+            f"# {title}\n\n"
+            "> 本项目使用 [pl-pipeline](https://github.com/walkertop/pl-pipeline-standalone) 管理 AI 工作流。\n"
             "> 完整工作流定义见 `pl/AGENTS.md`（canonical source）。\n\n"
             f"{block}"
         )
@@ -439,10 +458,11 @@ def cmd_unsync(args: argparse.Namespace) -> int:
             except OSError:
                 pass
 
-    # AGENTS.md 段落剔除
+    # AGENTS.md / CLAUDE.md 段落剔除
     cfg = manifest.get("root_agents_md", {})
     if cfg.get("enabled"):
-        target = pl_project / "AGENTS.md"
+        target_file = cfg.get("target_file", "AGENTS.md")
+        target = pl_project / target_file
         if target.exists():
             begin = cfg["marker_begin"]
             end = cfg["marker_end"]

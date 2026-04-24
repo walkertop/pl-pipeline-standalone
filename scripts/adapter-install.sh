@@ -9,6 +9,8 @@
 #   ./scripts/adapter-install.sh <adapter-dir> [target-project]
 #   ./scripts/adapter-install.sh --force <adapter-dir> [target-project]
 #   ./scripts/adapter-install.sh --dry-run <adapter-dir> [target-project]
+#   ./scripts/adapter-install.sh --no-legacy <adapter-dir>     # 不写 .codebuddy/
+#   ./scripts/adapter-install.sh --ide-sync <adapter-dir>      # 装完自动跑 pl ide sync
 #
 #   target-project 默认 = \$PL_PROJECT
 #
@@ -16,17 +18,27 @@
 #   --force        覆盖已存在的 agents/skills/rules（默认跳过）
 #   --dry-run      只显示将要执行的操作，不实际写文件
 #   --no-validate  跳过 adapter-validate.sh 预检（不推荐）
+#   --no-legacy    不写 .codebuddy/{agents,skills,rules}/（v1.12 兼容路径）
+#   --ide-sync     安装完成后自动调用 pl ide sync 把资产 fan-out 到 IDE 目录
 #
 # 退出码:
 #   0 = 成功
 #   1 = 失败
 #   2 = 参数错误
 #
-# 安装后产物:
-#   <target-project>/.pl-adapter.yaml     ← 注入元数据
-#   <target-project>/pl/templates/*.md    ← adapter 的模板
-#   <target-project>/.codebuddy/{agents,skills,rules}/*.md
+# 安装后产物（v1.12+, OpenSpec 风格）:
+#   <target-project>/.pl-adapter.yaml         ← 注入元数据
+#   <target-project>/pl/templates/*.md        ← adapter 的模板
+#   <target-project>/pl/.adapter/agents/*.md  ← canonical（adapter 注入）
+#   <target-project>/pl/.adapter/skills/*.md
+#   <target-project>/pl/.adapter/rules/*.md
+#   <target-project>/.codebuddy/{agents,skills,rules}/*.md   ← 兼容路径（--no-legacy 跳过）
 #   <target-project>/scripts/adapter-<id>-*.sh
+#
+# canonical pl/.adapter/ 的好处:
+#   1. pl ide sync 自动 fan-out 到 .cursor/.codebuddy/.claude（无需 adapter 关心 IDE）
+#   2. 用户可以在 pl/agents/<name>.md 覆盖 adapter 注入的同名文件（项目 > adapter）
+#   3. v2.0 起 .codebuddy/ 兼容路径将默认关闭
 #
 # =============================================================================
 
@@ -53,9 +65,11 @@ TARGET=""
 FORCE=false
 DRY_RUN=false
 SKIP_VALIDATE=false
+NO_LEGACY=false
+IDE_SYNC=false
 
 usage() {
-  sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 }
 
@@ -64,6 +78,8 @@ while [[ $# -gt 0 ]]; do
     --force)       FORCE=true; shift ;;
     --dry-run)     DRY_RUN=true; shift ;;
     --no-validate) SKIP_VALIDATE=true; shift ;;
+    --no-legacy)   NO_LEGACY=true; shift ;;
+    --ide-sync)    IDE_SYNC=true; shift ;;
     -h|--help)     usage ;;
     --*)           log_error "Unknown option: $1"; usage ;;
     *)
@@ -347,7 +363,7 @@ for k in ${TPL_KEYS:-}; do
   do_copy "$ADAPTER_DIR/$path_val" "$TARGET/pl/templates/$k.md" "overwrite"
 done
 
-# ---- 2. agents → .codebuddy/agents/ (skip-if-exists) ----
+# ---- 2. agents → pl/.adapter/agents/ (canonical) + .codebuddy/agents/ (legacy) ----
 echo ""
 echo "${BOLD}[2/5] agents${NC}"
 for ((i=0; i<${AGENTS_COUNT:-0}; i++)); do
@@ -355,10 +371,11 @@ for ((i=0; i<${AGENTS_COUNT:-0}; i++)); do
   path_val="${!varname:-}"
   [[ -z "$path_val" ]] && continue
   basename=$(basename "$path_val")
-  do_copy "$ADAPTER_DIR/$path_val" "$TARGET/.codebuddy/agents/$basename" "skip-if-exists"
+  do_copy "$ADAPTER_DIR/$path_val" "$TARGET/pl/.adapter/agents/$basename" "skip-if-exists"
+  $NO_LEGACY || do_copy "$ADAPTER_DIR/$path_val" "$TARGET/.codebuddy/agents/$basename" "skip-if-exists"
 done
 
-# ---- 3. skills → .codebuddy/skills/ ----
+# ---- 3. skills → pl/.adapter/skills/ + .codebuddy/skills/ ----
 echo ""
 echo "${BOLD}[3/5] skills${NC}"
 for ((i=0; i<${SKILLS_COUNT:-0}; i++)); do
@@ -366,10 +383,11 @@ for ((i=0; i<${SKILLS_COUNT:-0}; i++)); do
   path_val="${!varname:-}"
   [[ -z "$path_val" ]] && continue
   basename=$(basename "$path_val")
-  do_copy "$ADAPTER_DIR/$path_val" "$TARGET/.codebuddy/skills/$basename" "skip-if-exists"
+  do_copy "$ADAPTER_DIR/$path_val" "$TARGET/pl/.adapter/skills/$basename" "skip-if-exists"
+  $NO_LEGACY || do_copy "$ADAPTER_DIR/$path_val" "$TARGET/.codebuddy/skills/$basename" "skip-if-exists"
 done
 
-# ---- 4. rules → .codebuddy/rules/ ----
+# ---- 4. rules → pl/.adapter/rules/ + .codebuddy/rules/ ----
 echo ""
 echo "${BOLD}[4/5] rules${NC}"
 for ((i=0; i<${RULES_COUNT:-0}; i++)); do
@@ -377,7 +395,8 @@ for ((i=0; i<${RULES_COUNT:-0}; i++)); do
   path_val="${!varname:-}"
   [[ -z "$path_val" ]] && continue
   basename=$(basename "$path_val")
-  do_copy "$ADAPTER_DIR/$path_val" "$TARGET/.codebuddy/rules/$basename" "skip-if-exists"
+  do_copy "$ADAPTER_DIR/$path_val" "$TARGET/pl/.adapter/rules/$basename" "skip-if-exists"
+  $NO_LEGACY || do_copy "$ADAPTER_DIR/$path_val" "$TARGET/.codebuddy/rules/$basename" "skip-if-exists"
 done
 
 # ---- 5. scripts → scripts/adapter-<id>-<key>.sh ----
@@ -453,6 +472,20 @@ else
   echo "  Next steps:"
   if [[ -n "${BA_COMPILE_CHECK_CMD:-}" ]]; then
     echo "    • In your shell: ${BOLD}export PL_BUILD_CHECK_CMD=\"$BA_COMPILE_CHECK_CMD\"${NC}"
+  fi
+  if $IDE_SYNC; then
+    echo ""
+    echo "  ${BOLD}━━━ pl ide sync ━━━${NC}"
+    if command -v pl >/dev/null 2>&1; then
+      # 必须 unset PL_PROJECT, 否则会沿用当前 shell 里的旧值, detect 走错路径
+      ( cd "$TARGET" && unset PL_PROJECT && pl ide sync ) \
+        || log_warn "pl ide sync 失败 (非致命)"
+    else
+      log_warn "pl 未在 PATH 中，跳过 ide sync。手动执行: cd $TARGET && pl ide sync"
+    fi
+  else
+    echo "    • Fan-out 资产到 IDE: ${BOLD}cd $TARGET && pl ide sync${NC}"
+    echo "    • （或下次 install 时加 --ide-sync 自动联动）"
   fi
   echo "    • Start your first change: ${BOLD}/pl:proposal <change-id>${NC}"
   echo "    • Or (CLI): see adapters/adapter-$ADAPTER_ID/docs/case-study.md"

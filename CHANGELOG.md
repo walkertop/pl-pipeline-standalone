@@ -7,6 +7,111 @@
 
 ---
 
+## [pl-v1.12.0] - 2026-04-24
+
+### 新增
+
+#### `pl ide` 扩展到 4 个 IDE：Claude Code + Codex CLI
+
+继 v1.11.0 首发 Cursor + CodeBuddy 之后, 利用 manifest 化的 IDE 集成层, 几乎零业务代码新增了：
+
+- **Claude Code**（`ide-integrations/claude/manifest.yaml`）
+  - `commands` → `.claude/commands/pl/*.md`（带 frontmatter）
+  - `agents`   → `.claude/agents/pl-*.md`
+  - `rules`    → 通过根 `CLAUDE.md` 引用（Claude 没 rules 子目录）
+  - `skills`   → v1.13 计划支持目录型 skill；v1.12 先按 reference 模式列在 CLAUDE.md
+  - 注册入口：`CLAUDE.md`（独立于 `AGENTS.md`）
+
+- **Codex CLI**（`ide-integrations/codex/manifest.yaml`）
+  - 完全 reference-only：不复制任何文件, 只在 `AGENTS.md` 维护 pl-managed 段, 列出 `@pl/...` 引用清单
+  - 这种"零侵入"模式贴合 Codex 把 `AGENTS.md` 当 canonical 的设计
+
+支持矩阵更新见 [`docs/ide-integration.md`](./docs/ide-integration.md)。
+
+#### Manifest 新增 `target_file` 字段
+
+`root_agents_md.target_file` 默认 `AGENTS.md`；Claude 用 `CLAUDE.md`。
+
+#### Reference 列表智能化
+
+`enabled: false` 的 section 不再写绝对 PL_HOME 路径。优化为：
+
+- 项目内有 `pl/<section>/` → 列项目内相对路径（可移植）
+- 项目内没有但 PL_HOME 自带 → 给一行 `cp -r $PL_HOME/...` 行动指引（不暴露绝对路径）
+
+#### `adapter-install.sh` 三大改造
+
+1. **canonical 双写**：除了 legacy `.codebuddy/`，**同时**写到 `pl/.adapter/{agents,skills,rules}/`。
+   `pl ide sync` 自动从 `pl/.adapter/` 拉取并 fan-out 到所有目标 IDE，**adapter 不再需要关心 IDE**。
+2. **新选项 `--no-legacy`**：跳过 `.codebuddy/` 写入（v2.0 起将默认开启）
+3. **新选项 `--ide-sync`**：装完自动调用 `pl ide sync`，无缝衔接
+
+#### `pl/config.yaml requires.pl_version` 启动自检
+
+```yaml
+# pl/config.yaml
+requires:
+  pl_version: ">=1.12"
+```
+
+`bin/pl` 启动时（除 `doctor`/`upgrade`/`version`/`help`/`detect`/`new`/`init`/`env` 外）会做 SemVer 比较：
+
+- 当前 < 要求 → stderr 输出黄色警告 + 提示跑 `pl upgrade`，但**不阻塞**执行
+- 当前 ≥ 要求 → 静默
+- `PL_REQUIRE_CHECK=0` 关闭
+
+支持的算子：`>=`、`>`、`<=`、`<`、`==`、`^`/`~`/`=`（后三者按 `>=` 处理）。
+
+#### `pl-rule-scan.sh` 三层规则解析
+
+为配合 `pl/.adapter/` canonical 路径，规则查找顺序：
+
+```
+PL_PROJECT/pl/rules/             # 项目层（最高）
+PL_PROJECT/pl/.adapter/rules/    # adapter 注入层（v1.12+）
+PL_PROJECT/.codebuddy/rules/     # legacy 兼容
+```
+
+不需要任何配置, 自动按优先级 fallback。
+
+### 修复
+
+- `pl_ide_sync.py` 在写 hash marker 时强制要求 source 在 PL_HOME 下；现已支持 `pl/.adapter/` 这种 PL_PROJECT 内 source
+
+### 测试
+
+新增 7 个 case（`Suite: ide-sync-v1.12` + `Suite: require-check`）：
+
+- ide-integrations 目录包含 4 个内置 manifest
+- `pl ide sync --ide claude` 写入 `.claude/` + `CLAUDE.md`
+- `pl ide sync --ide codex` 仅写 `AGENTS.md`，不复制任何目录
+- 4 个 IDE 共存时 `AGENTS.md`/`CLAUDE.md` 段落互不覆盖
+- `requires.pl_version` 不匹配 → stderr 警告
+- `PL_REQUIRE_CHECK=0` 关闭自检
+- `doctor` 命令本身不被自检干扰
+
+总用例 50/50。
+
+### 文档
+
+- 新增 `docs/ide-integration.md`：IDE 集成完整指南（支持矩阵、流程、设计原则、添加新 IDE、故障排查、路线图）
+- 更新 `README.md` § 多 IDE 接入 章节
+- `assets/pl/config.default.yaml` 加 `requires` section 示例
+
+### 兼容性
+
+- **完全向后兼容**：v1.11.0 行为保留, adapter-install 默认仍写 `.codebuddy/`
+- **SemVer 政策**：`requires.pl_version` 自检默认开启, 但 warn-only, 不破坏既有流程
+- v2.0 起 `.codebuddy/` legacy 路径默认关闭, 需 `--legacy` 启用（v1.x 期间会有 deprecation warning）
+
+### 路线图
+
+- v1.13: Claude `.claude/skills/<name>/SKILL.md` 目录型同步
+- v1.13: `pl ide diff` 预览未来 sync 行为
+- v2.0: legacy `.codebuddy/` 路径默认关闭
+
+---
+
 ## [pl-v1.11.0] - 2026-04-24
 
 ### 新增
