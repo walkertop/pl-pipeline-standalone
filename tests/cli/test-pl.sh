@@ -28,10 +28,12 @@ unset PL_PROJECT 2>/dev/null || true
 tc_suite "meta-commands"
 
 tc_case "pl --version 输出版本号"
-tc_assert_contains "1.8" "pl --version" "$PL" --version
+# 从 VERSION 文件读真实版本，避免每次升版都要改测试
+EXPECTED_VER=$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")
+tc_assert_contains "$EXPECTED_VER" "pl --version" "$PL" --version
 
 tc_case "pl version 输出版本号（别名）"
-tc_assert_contains "1.8" "pl version" "$PL" version
+tc_assert_contains "$EXPECTED_VER" "pl version" "$PL" version
 
 tc_case "pl env 输出 PL_HOME"
 tc_assert_contains "PL_HOME" "pl env" "$PL" env
