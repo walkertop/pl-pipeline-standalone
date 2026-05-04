@@ -64,6 +64,10 @@ coverage/
 /playwright-report/
 /playwright/.cache/
 
+# ---- Python ----
+__pycache__/
+*.py[cod]
+
 # ---- pl-pipeline runtime outputs ----
 # 运行时产物不入版本控制（每个宿主项目自己产出）
 pipeline-output/

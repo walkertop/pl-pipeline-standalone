@@ -82,6 +82,7 @@ ${C_BLD}核心命令:${C_OFF}
   ${C_GRN}init${C_OFF}             创建 change 骨架（.state.md + workflow.start 事件）
   ${C_GRN}status${C_OFF}           查看 pipeline 状态（人读表 / --json / --self-check）
   ${C_GRN}run${C_OFF}              执行 gate / check（统一执行器）
+  ${C_GRN}agent run${C_OFF}        执行 agent 命令 → gate 验证 → repair 重试 → trace
   ${C_GRN}phase${C_OFF}            手动推进阶段并写 trace 事件
   ${C_GRN}orchestrator${C_OFF}     Agentic workflow 全流程编排
   ${C_GRN}dashboard${C_OFF}        启动可视化面板（live SSE）
@@ -148,6 +149,7 @@ _pl_subcmd_to_script() {
     init)               echo "pl-state-init.sh" ;;
     status)             echo "pl-status.sh" ;;
     run)                echo "pl-runner.sh" ;;
+    agent)              echo "pl-agent-run.sh" ;;
     phase)              echo "pl-phase.sh" ;;
     orchestrator)       echo "pipeline-orchestrator.sh" ;;
     dashboard)          echo "pl-dashboard.sh" ;;
@@ -367,7 +369,7 @@ case "$cmd" in
     sub="$1"; shift || true
     # help <sub> [<verb>]：翻译后透传 -h
     case "$sub" in
-      contract|trace|adapter|piao|dashboard|observe|ide)
+      contract|trace|adapter|piao|dashboard|observe|ide|agent)
         if [[ $# -eq 0 ]]; then
           echo "用法: pl $sub <verb> [args...]"
           echo "用 'pl help' 看可用 verb。"
@@ -395,6 +397,7 @@ case "$cmd" in
           observe:check)          _pl_exec pl-observe-check.sh --help ;;
           ide:detect|ide:sync|ide:unsync|ide:list|ide:help)
                                   _pl_exec pl-ide.sh "$verb" --help ;;
+          agent:run)              _pl_exec pl-agent-run.sh --help ;;
           *) _pl_die "未知子命令: pl ${sub} ${verb}（用 'pl help' 看清单）" ;;
         esac
         ;;
@@ -494,6 +497,16 @@ case "$cmd" in
   # ---- 命名空间：ide ------------------------------------------------------
   ide)
     _pl_exec pl-ide.sh "$@"
+    ;;
+
+  # ---- 命名空间：agent ----------------------------------------------------
+  agent)
+    [[ $# -eq 0 ]] && _pl_die "缺少子动词。用法: pl agent <run> [args...]"
+    verb="$1"; shift
+    case "$verb" in
+      run)        _pl_exec pl-agent-run.sh "$@" ;;
+      *)          _pl_die "未知 agent verb: ${verb}（run）" ;;
+    esac
     ;;
 
   # ---- 顶层 1:1 映射 ------------------------------------------------------

@@ -7,6 +7,9 @@
 
 ## 当前版本
 
+- **分支预览（2026-05-04）**：`pl agent run` Agent Execution Loop MVP — 本地 executor → gate 验证 → repair context → retry → trace；用于验证“Agentic Coding Control Plane”方向
+- **v1.12.0**（2026-04-24）：`pl ide sync` 扩展到 Claude Code / Codex；`requires.pl_version` 启动自检；adapter 注入层 canonical 化
+- **v1.11.0**（2026-04-24）：IDE sync 首发 Cursor / CodeBuddy；manifest 化 IDE 集成
 - **v1.10.0**（2026-04-24）：`pl detect` / `pl scan` 扫描已有项目给出建议，`pl new --here` 默认改为只读 dry-run（不再硬塞模板）
 - **v1.9.x**（2026-04-24）：zero-friction 上手 — `install.sh` 一行装到 `~/.pl-pipeline`，`pl new my-app --stack <stack>` 10 秒起项目
 - **v1.8.x**（2026-04-24）：`bin/pl` 统一 CLI 入口收口 34 个 scripts；自吃狗粮（agent/文档/CI 全切到 `pl xxx` 形式）；首批 29 个 CLI 单元测试
@@ -44,6 +47,8 @@
 | **v1.8** | 统一 CLI + 自吃狗粮 + 测试 | `bin/pl` 收口 34 个脚本；agent/docs/CI 全切 `pl xxx`；29 个 CLI 单测 | ✅ 已完成（pl-v1.8.0~1.8.4） |
 | **v1.9** | zero-friction 上手 | `install.sh` 一行装；`pl new --stack` 10 秒起项目 | ✅ 已完成（pl-v1.9.0~1.9.1） |
 | **v1.10** | `pl detect` + `--here` 安全化 | 已有项目接入：先扫描后建议，不再硬塞模板 | ✅ 已完成（pl-v1.10.0） |
+| **v1.11-v1.12** | 多 IDE sync | Cursor / CodeBuddy / Claude Code / Codex 资产 fan-out | ✅ 已完成（pl-v1.11.0~1.12.0） |
+| **Agent Loop MVP** | Agentic Coding Control Plane | executor 命令 → gate → repair context → retry → trace | 🧪 分支预览 |
 | F | 扩充 adapter 生态（android / kmp-kuikly / go） | 证明栈级 adapter 机制可复用 | 🟡 未做 |
 | H | retro-miner 真实 trace 挖掘链路（B→C→D） | 闭合"观察-挖掘-反馈"飞轮 | 🟡 未做（被 v1.7 CDC 替代部分动机） |
 

@@ -357,7 +357,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run pl CLI dispatcher tests
-        run: bash tests/cli/test-pl.sh
+        run: |
+          bash tests/cli/test-pl.sh
+          bash tests/cli/test-pl-agent.sh
 
   # -----------------------------------------------------------------
   # Job 8：CDC 真实场景端到端（v1.8.3+）
@@ -405,4 +407,3 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run pl detect tests
         run: bash tests/cli/test-pl-detect.sh
-
