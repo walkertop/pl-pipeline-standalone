@@ -21,6 +21,68 @@ pl agent run \
 
 `--repair-cmd` 是显式 override，适合一次性调试。
 
+## Executors
+
+### `local`
+
+默认 executor。它直接在 `PL_PROJECT` 下执行 `--cmd`：
+
+```bash
+pl agent run \
+  --change add-search \
+  --task T03 \
+  --executor local \
+  --cmd "./scripts/agent-implement.sh" \
+  --verify-gate D
+```
+
+### `codex-cli`
+
+`codex-cli` executor 调用本机 Codex CLI 的非交互模式。它适合把 Codex 作为外部 coding agent 纳入 PL 控制面。
+
+```bash
+pl agent run \
+  --change add-search \
+  --task T03 \
+  --executor codex-cli \
+  --model codex-local-test \
+  --prompt-path prompts/implement.md \
+  --input-artifact pl/changes/add-search/spec.md \
+  --output-artifact app/search.py \
+  --verify-gate D
+```
+
+默认命令形态：
+
+```bash
+codex exec \
+  --cd "$PL_PROJECT" \
+  --sandbox workspace-write \
+  --ask-for-approval never \
+  -m "$MODEL" \
+  - < "$PL_PROJECT/$PROMPT_PATH"
+```
+
+可选参数：
+
+| Option | Meaning |
+|---|---|
+| `--codex-bin <path>` | Codex binary，默认 `codex`，也可用 `CODEX_BIN` 环境变量 |
+| `--codex-sandbox <mode>` | 传给 `codex exec --sandbox`，默认 `workspace-write` |
+| `--codex-approval <policy>` | 传给 `codex exec --ask-for-approval`，默认 `never` |
+| `--codex-arg <arg>` | 额外传给 `codex exec` 的参数，可重复 |
+
+`codex-cli` 会自动补 trace metadata：
+
+- `provider=openai`
+- `tool_calls=["codex.exec"]`
+
+测试和 demo 使用 fake Codex binary，不要求真实登录态：
+
+```bash
+bash examples/demo-agent-codex-cli/run-demo.sh
+```
+
 ## Agent Trace Metadata
 
 外部 executor adapter 可以把 agent 身份、prompt、产物、工具和 token 用量一起写进 trace：
@@ -151,7 +213,9 @@ repair 命令会收到这些环境变量：
 
 ```bash
 bash examples/demo-agent-loop/run-demo.sh
+bash examples/demo-agent-codex-cli/run-demo.sh
 bash examples/demo-agent-crud-service/run-demo.sh
 ```
 
 `demo-agent-loop` 是最小计算器闭环；`demo-agent-crud-service` 展示通过 `agent.repair.strategy.test_failure` 自动选择修复脚本。
+`demo-agent-codex-cli` 展示 `codex-cli` executor 的参数组装、stdin prompt 和 trace 记录。

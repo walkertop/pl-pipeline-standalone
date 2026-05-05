@@ -208,6 +208,7 @@ agent:
 
 ```bash
 bash examples/demo-agent-loop/run-demo.sh
+bash examples/demo-agent-codex-cli/run-demo.sh
 bash examples/demo-agent-crud-service/run-demo.sh
 ```
 

@@ -280,6 +280,92 @@ fi
 
 rm -rf "$TMPDIR_TRACE"
 
+tc_case "pl agent run can invoke codex-cli executor from prompt"
+TMPDIR_CODEX=$(mktemp -d)
+mkdir -p "$TMPDIR_CODEX/bin" "$TMPDIR_CODEX/prompts" "$TMPDIR_CODEX/app" "$TMPDIR_CODEX/pl/changes/codex-exec-demo"
+
+cat > "$TMPDIR_CODEX/pl/config.yaml" <<'YML'
+version: pl@v1.1
+namespace: demo-codex-cli
+YML
+
+cat > "$TMPDIR_CODEX/prompts/implement.md" <<'MD'
+Create app/codex-result.txt with the text codex fake ok.
+MD
+cat > "$TMPDIR_CODEX/bin/codex" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+{
+  printf 'args:'
+  for arg in "$@"; do printf ' [%s]' "$arg"; done
+  printf '\n'
+  printf 'stdin:\n'
+  cat
+} > codex-invocation.log
+
+mkdir -p app
+printf 'codex fake ok\n' > app/codex-result.txt
+printf '{"event":"fake-codex","tokens":{"input":11,"output":7}}\n'
+SH
+chmod +x "$TMPDIR_CODEX/bin/codex"
+
+set +e
+out=$(cd "$TMPDIR_CODEX" && PATH="$TMPDIR_CODEX/bin:$PATH" PL_PROJECT="$TMPDIR_CODEX" PL_HOME="$REPO_ROOT" "$PL" agent run \
+  --change codex-exec-demo \
+  --task T02 \
+  --executor codex-cli \
+  --model codex-fake-model \
+  --prompt-path prompts/implement.md \
+  --output-artifact app/codex-result.txt \
+  --json 2>&1)
+rc=$?
+set -e
+
+codex_trace="$TMPDIR_CODEX/pipeline-output/trace/codex-exec-demo.events.jsonl"
+codex_log="$TMPDIR_CODEX/codex-invocation.log"
+if [[ $rc -eq 0 ]] \
+   && [[ -f "$codex_log" ]] \
+   && grep -Fq 'args: [exec]' "$codex_log" \
+   && grep -Fq '[--cd]' "$codex_log" \
+   && grep -Fq '[--sandbox] [workspace-write]' "$codex_log" \
+   && grep -Fq '[--ask-for-approval] [never]' "$codex_log" \
+   && grep -Fq '[-m] [codex-fake-model]' "$codex_log" \
+   && grep -Fq '[-]' "$codex_log" \
+   && grep -Fq 'Create app/codex-result.txt' "$codex_log" \
+   && grep -q 'codex fake ok' "$TMPDIR_CODEX/app/codex-result.txt" \
+   && [[ -f "$codex_trace" ]] \
+   && grep -q '"executor":"codex-cli"' "$codex_trace" \
+   && grep -q '"provider":"openai"' "$codex_trace" \
+   && grep -q '"model":"codex-fake-model"' "$codex_trace" \
+   && grep -Fq '"tool_calls":["codex.exec"]' "$codex_trace" \
+   && grep -Fq '"output_artifacts":["app/codex-result.txt"]' "$codex_trace"; then
+  tc_ok
+else
+  tc_fail "expected codex-cli executor invocation + trace; rc=$rc output:
+    $out"
+fi
+
+rm -rf "$TMPDIR_CODEX"
+
+tc_case "demo-agent-codex-cli runs fake codex executor"
+set +e
+out=$(PL_HOME="$REPO_ROOT" bash "$REPO_ROOT/examples/demo-agent-codex-cli/run-demo.sh" 2>&1)
+rc=$?
+set -e
+
+codex_demo_trace="$REPO_ROOT/examples/demo-agent-codex-cli/pipeline-output/trace/codex-cli-demo.events.jsonl"
+if [[ $rc -eq 0 ]] \
+   && [[ -f "$codex_demo_trace" ]] \
+   && grep -q '"executor":"codex-cli"' "$codex_demo_trace" \
+   && grep -q '"provider":"openai"' "$codex_demo_trace" \
+   && grep -Fq '"tool_calls":["codex.exec"]' "$codex_demo_trace" \
+   && grep -q '"status":"passed"' "$codex_demo_trace"; then
+  tc_ok
+else
+  tc_fail "expected fake codex-cli demo to pass; rc=$rc output:
+    $out"
+fi
+
 tc_case "demo-agent-crud-service runs a real CRUD repair loop"
 set +e
 out=$(PL_HOME="$REPO_ROOT" bash "$REPO_ROOT/examples/demo-agent-crud-service/run-demo.sh" 2>&1)

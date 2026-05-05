@@ -5,6 +5,7 @@
 #
 # 用法:
 #   pl-agent-run.sh --change <id> --cmd <command> [--task <id>]
+#   pl-agent-run.sh --change <id> --executor codex-cli --prompt-path <file>
 #   pl-agent-run.sh --change <id> --cmd <command> --verify-gate D \
 #     --repair-cmd <command> --max-retries 1 [--json]
 #   # 或在 pl/config.yaml 配置 agent.repair.strategy.<failure_kind>
@@ -53,6 +54,10 @@ OUTPUT_ARTIFACTS=()
 TOOL_CALLS=()
 TOKENS_INPUT=""
 TOKENS_OUTPUT=""
+CODEX_BIN="${CODEX_BIN:-codex}"
+CODEX_SANDBOX="workspace-write"
+CODEX_APPROVAL="never"
+CODEX_ARGS=()
 CMD=""
 VERIFY_GATE=""
 REPAIR_CMD=""
@@ -90,6 +95,10 @@ while [[ $# -gt 0 ]]; do
     --tool-call)   require_value "$1" "${2:-}"; TOOL_CALLS+=("$2"); shift 2 ;;
     --tokens-input)  require_value "$1" "${2:-}"; TOKENS_INPUT="$2"; shift 2 ;;
     --tokens-output) require_value "$1" "${2:-}"; TOKENS_OUTPUT="$2"; shift 2 ;;
+    --codex-bin)   require_value "$1" "${2:-}"; CODEX_BIN="$2"; shift 2 ;;
+    --codex-sandbox) require_value "$1" "${2:-}"; CODEX_SANDBOX="$2"; shift 2 ;;
+    --codex-approval) require_value "$1" "${2:-}"; CODEX_APPROVAL="$2"; shift 2 ;;
+    --codex-arg)   require_value "$1" "${2:-}"; CODEX_ARGS+=("$2"); shift 2 ;;
     --cmd)         require_value "$1" "${2:-}"; CMD="$2"; shift 2 ;;
     --verify-gate) require_value "$1" "${2:-}"; VERIFY_GATE="$2"; shift 2 ;;
     --repair-cmd)  require_value "$1" "${2:-}"; REPAIR_CMD="$2"; REPAIR_CMD_SOURCE="cli"; shift 2 ;;
@@ -101,6 +110,86 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$CHANGE" ]] || { log_error "Missing --change <id>"; usage; }
+
+shell_quote() {
+  printf '%q' "$1"
+}
+
+shell_join() {
+  local joined="" part quoted
+  for part in "$@"; do
+    quoted=$(shell_quote "$part")
+    if [[ -z "$joined" ]]; then
+      joined="$quoted"
+    else
+      joined="$joined $quoted"
+    fi
+  done
+  printf '%s' "$joined"
+}
+
+array_contains() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ "$item" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+build_codex_cli_command() {
+  if [[ -z "$PROMPT_PATH" ]]; then
+    log_error "--executor codex-cli requires --prompt-path <file>"
+    exit 2
+  fi
+
+  local prompt_abs
+  case "$PROMPT_PATH" in
+    /*) prompt_abs="$PROMPT_PATH" ;;
+    *)  prompt_abs="$PL_PROJECT/$PROMPT_PATH" ;;
+  esac
+  if [[ ! -f "$prompt_abs" ]]; then
+    log_error "prompt file not found: $prompt_abs"
+    exit 2
+  fi
+
+  [[ -n "$PROVIDER" ]] || PROVIDER="openai"
+  if ! array_contains "codex.exec" "${TOOL_CALLS[@]:-}"; then
+    TOOL_CALLS+=("codex.exec")
+  fi
+
+  local args=("$CODEX_BIN" "exec" "--cd" "$PL_PROJECT" "--sandbox" "$CODEX_SANDBOX" "--ask-for-approval" "$CODEX_APPROVAL")
+  if [[ -n "$MODEL" ]]; then
+    args+=("-m" "$MODEL")
+  fi
+  if [[ ${#CODEX_ARGS[@]} -gt 0 ]]; then
+    args+=("${CODEX_ARGS[@]}")
+  fi
+  args+=("-")
+
+  CMD="$(shell_join "${args[@]}") < $(shell_quote "$prompt_abs")"
+}
+
+case "$EXECUTOR" in
+  local)
+    : ;;
+  codex-cli)
+    if [[ -z "$CMD" ]]; then
+      build_codex_cli_command
+    fi
+    [[ -n "$PROVIDER" ]] || PROVIDER="openai"
+    if ! array_contains "codex.exec" "${TOOL_CALLS[@]:-}"; then
+      TOOL_CALLS+=("codex.exec")
+    fi
+    ;;
+  *)
+    if [[ -z "$CMD" ]]; then
+      log_error "--executor $EXECUTOR requires --cmd <command>"
+      exit 2
+    fi
+    ;;
+esac
+
 [[ -n "$CMD" ]] || { log_error "Missing --cmd <command>"; usage; }
 if ! [[ "$MAX_RETRIES" =~ ^[0-9]+$ ]]; then
   log_error "--max-retries must be a non-negative integer"

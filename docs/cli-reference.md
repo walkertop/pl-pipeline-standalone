@@ -210,6 +210,9 @@ pl agent run \
 # 或在 pl/config.yaml 写 agent.repair.strategy，让 pl 按 failure_kind 自动选 repair
 bash examples/demo-agent-crud-service/run-demo.sh
 
+# Codex CLI executor（demo 使用 fake codex，不要求登录态）
+bash examples/demo-agent-codex-cli/run-demo.sh
+
 # 一键 dashboard
 pl dashboard --open --port 8889
 

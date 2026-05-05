@@ -94,6 +94,9 @@ examples/*/build/
 examples/*/.pytest_cache/
 examples/*/.mypy_cache/
 examples/*/.ruff_cache/
+examples/*/.tmp-bin/
+examples/*/codex-invocation.log
+examples/demo-agent-codex-cli/app/codex-result.txt
 
 # 以下必须提交（作为 pl-pipeline 真实运行过的证据）
 !examples/*/pl/
