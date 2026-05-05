@@ -115,4 +115,126 @@ fi
 
 rm -rf "$TMPDIR_AGENT"
 
+tc_case "pl agent run can choose repair command from config policy"
+TMPDIR_POLICY=$(mktemp -d)
+mkdir -p "$TMPDIR_POLICY/app" "$TMPDIR_POLICY/tests" "$TMPDIR_POLICY/scripts" "$TMPDIR_POLICY/pl/changes/agent-loop-policy"
+
+cat > "$TMPDIR_POLICY/pl/config.yaml" <<'YML'
+version: pl@v1.1
+namespace: demo-agent-policy
+agent:
+  repair:
+    max_retries: 1
+    strategy:
+      test_failure: "./scripts/repair_from_policy.sh"
+      default: "./scripts/repair_default.sh"
+checks:
+  - id: unit_tests
+    label: "Python unit tests"
+    cmd: "python3 -m unittest discover -s tests"
+    cwd: "."
+    required: true
+gates:
+  D:
+    from: IMPLEMENT
+    to: VERIFY
+    eval: all_checks.pass
+    on_failure: block
+    checks: [unit_tests]
+YML
+
+touch "$TMPDIR_POLICY/app/__init__.py"
+cat > "$TMPDIR_POLICY/app/calc.py" <<'PY'
+def add(a, b):
+    return a + b
+PY
+cat > "$TMPDIR_POLICY/tests/test_calc.py" <<'PY'
+import unittest
+
+from app.calc import add
+
+
+class CalcPolicyTest(unittest.TestCase):
+    def test_adds_two_numbers(self):
+        self.assertEqual(add(2, 3), 5)
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+cat > "$TMPDIR_POLICY/scripts/write_bad_impl.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+cat > app/calc.py <<'PY'
+def add(a, b):
+    return a - b
+PY
+SH
+cat > "$TMPDIR_POLICY/scripts/repair_from_policy.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+test "${PL_FAILURE_KIND:-}" = "test_failure"
+grep -q "failure_kind: \`test_failure\`" "$PL_REPAIR_CONTEXT"
+cat > app/calc.py <<'PY'
+def add(a, b):
+    return a + b
+PY
+SH
+cat > "$TMPDIR_POLICY/scripts/repair_default.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "default repair should not be used" >&2
+exit 1
+SH
+chmod +x "$TMPDIR_POLICY/scripts/write_bad_impl.sh" "$TMPDIR_POLICY/scripts/repair_from_policy.sh" "$TMPDIR_POLICY/scripts/repair_default.sh"
+
+set +e
+out=$(cd "$TMPDIR_POLICY" && PL_PROJECT="$TMPDIR_POLICY" PL_HOME="$REPO_ROOT" "$PL" agent run \
+  --change agent-loop-policy \
+  --task T04 \
+  --executor local \
+  --cmd "./scripts/write_bad_impl.sh" \
+  --verify-gate D 2>&1)
+rc=$?
+set -e
+
+policy_trace="$TMPDIR_POLICY/pipeline-output/trace/agent-loop-policy.events.jsonl"
+policy_context=""
+policy_context_dir="$TMPDIR_POLICY/pipeline-output/agent-runs/agent-loop-policy"
+if [[ -d "$policy_context_dir" ]]; then
+  policy_context=$(find "$policy_context_dir" -name 'repair-context-attempt-0.md' -print 2>/dev/null | head -1)
+fi
+
+if [[ $rc -eq 0 ]] \
+   && [[ -f "$policy_trace" ]] \
+   && [[ -f "$policy_context" ]] \
+   && grep -q '"failure_kind":"test_failure"' "$policy_trace" \
+   && grep -q '"repair_source":"policy:test_failure"' "$policy_trace" \
+   && grep -q "return a + b" "$TMPDIR_POLICY/app/calc.py"; then
+  tc_ok
+else
+  tc_fail "expected config policy repair to run; rc=$rc context=$policy_context output:
+    $out"
+fi
+
+rm -rf "$TMPDIR_POLICY"
+
+tc_case "demo-agent-crud-service runs a real CRUD repair loop"
+set +e
+out=$(PL_HOME="$REPO_ROOT" bash "$REPO_ROOT/examples/demo-agent-crud-service/run-demo.sh" 2>&1)
+rc=$?
+set -e
+
+crud_trace="$REPO_ROOT/examples/demo-agent-crud-service/pipeline-output/trace/crud-service-demo.events.jsonl"
+if [[ $rc -eq 0 ]] \
+   && [[ -f "$crud_trace" ]] \
+   && grep -q '"failure_kind":"test_failure"' "$crud_trace" \
+   && grep -q '"repair_source":"policy:test_failure"' "$crud_trace" \
+   && grep -q '"event":"agent.run.complete"' "$crud_trace"; then
+  tc_ok
+else
+  tc_fail "expected CRUD demo to pass through policy repair loop; rc=$rc output:
+    $out"
+fi
+
 tc_summary

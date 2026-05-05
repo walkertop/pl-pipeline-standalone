@@ -7,6 +7,7 @@
 #   pl-agent-run.sh --change <id> --cmd <command> [--task <id>]
 #   pl-agent-run.sh --change <id> --cmd <command> --verify-gate D \
 #     --repair-cmd <command> --max-retries 1 [--json]
+#   # 或在 pl/config.yaml 配置 agent.repair.strategy.<failure_kind>
 #
 # 职责：
 #   1. 执行一个 agent/executor 命令
@@ -45,8 +46,15 @@ EXECUTOR="local"
 CMD=""
 VERIFY_GATE=""
 REPAIR_CMD=""
+REPAIR_CMD_SOURCE=""
 MAX_RETRIES=0
+MAX_RETRIES_SET=false
 JSON_OUT=false
+POLICY_MAX_RETRIES=""
+POLICY_STRATEGIES=""
+LAST_FAILURE_KIND=""
+SELECTED_REPAIR_SOURCE=""
+SELECTED_REPAIR_CMD=""
 
 usage() {
   sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
@@ -66,8 +74,8 @@ while [[ $# -gt 0 ]]; do
     --executor)    require_value "$1" "${2:-}"; EXECUTOR="$2"; shift 2 ;;
     --cmd)         require_value "$1" "${2:-}"; CMD="$2"; shift 2 ;;
     --verify-gate) require_value "$1" "${2:-}"; VERIFY_GATE="$2"; shift 2 ;;
-    --repair-cmd)  require_value "$1" "${2:-}"; REPAIR_CMD="$2"; shift 2 ;;
-    --max-retries) require_value "$1" "${2:-}"; MAX_RETRIES="$2"; shift 2 ;;
+    --repair-cmd)  require_value "$1" "${2:-}"; REPAIR_CMD="$2"; REPAIR_CMD_SOURCE="cli"; shift 2 ;;
+    --max-retries) require_value "$1" "${2:-}"; MAX_RETRIES="$2"; MAX_RETRIES_SET=true; shift 2 ;;
     --json)        JSON_OUT=true; shift ;;
     -h|--help)     usage 0 ;;
     *)             log_error "Unknown option: $1"; usage ;;
@@ -80,6 +88,143 @@ if ! [[ "$MAX_RETRIES" =~ ^[0-9]+$ ]]; then
   log_error "--max-retries must be a non-negative integer"
   exit 2
 fi
+
+load_repair_policy() {
+  local cfg="$PL_PROJECT/pl/config.yaml"
+  [[ -f "$cfg" ]] || return 0
+
+  local line kind key value
+  while IFS=$'\t' read -r kind key value; do
+    [[ -n "$kind" ]] || continue
+    case "$kind" in
+      max_retries)
+        POLICY_MAX_RETRIES="$key"
+        ;;
+      strategy)
+        POLICY_STRATEGIES="${POLICY_STRATEGIES}${key}"$'\t'"${value}"$'\n'
+        ;;
+    esac
+  done < <(python3 - "$cfg" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+
+def strip_comment(line):
+    out = []
+    quote = None
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if quote:
+            out.append(ch)
+            if ch == quote:
+                quote = None
+        else:
+            if ch in ("'", '"'):
+                quote = ch
+                out.append(ch)
+            elif ch == "#":
+                break
+            else:
+                out.append(ch)
+        i += 1
+    return "".join(out).rstrip()
+
+def scalar(value):
+    value = value.strip()
+    if not value:
+        return ""
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        value = value[1:-1]
+    return value
+
+stack = []
+with open(path, encoding="utf-8") as f:
+    for raw in f:
+        line = strip_comment(raw.rstrip("\n"))
+        if not line.strip() or line.lstrip().startswith("- "):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        text = line.strip()
+        if ":" not in text:
+            continue
+        key, value = text.split(":", 1)
+        key = key.strip()
+        value = scalar(value)
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        current = [item[1] for item in stack] + [key]
+        if current == ["agent", "repair", "max_retries"] and value:
+            print(f"max_retries\t{value}")
+        elif len(current) == 4 and current[:3] == ["agent", "repair", "strategy"] and value:
+            print(f"strategy\t{current[3]}\t{value}")
+        if not value:
+            stack.append((indent, key))
+PY
+  )
+
+  if [[ "$MAX_RETRIES_SET" == false && -n "$POLICY_MAX_RETRIES" ]]; then
+    if [[ "$POLICY_MAX_RETRIES" =~ ^[0-9]+$ ]]; then
+      MAX_RETRIES="$POLICY_MAX_RETRIES"
+    else
+      log_warn "agent.repair.max_retries ignored; expected integer, got: $POLICY_MAX_RETRIES"
+    fi
+  fi
+}
+
+policy_command_for() {
+  local key="$1"
+  printf '%s' "$POLICY_STRATEGIES" | awk -F '\t' -v k="$key" '$1 == k { print $2; exit }'
+}
+
+classify_failure() {
+  local log_file="$1"
+  if [[ ! -f "$log_file" ]]; then
+    echo "unknown"
+  elif grep -Eqi 'SyntaxError|IndentationError|parse error|syntax error' "$log_file"; then
+    echo "syntax_error"
+  elif grep -Eqi 'ModuleNotFoundError|ImportError|No such file|No such file or directory|file not found|cannot find' "$log_file"; then
+    echo "missing_file"
+  elif grep -Eqi 'AssertionError|FAIL:|FAILED \(|FAILED|unittest|pytest|expected .* got' "$log_file"; then
+    echo "test_failure"
+  elif grep -Eqi 'timed out|timeout' "$log_file"; then
+    echo "timeout"
+  elif grep -Eqi 'contract|pact|violation|schema' "$log_file"; then
+    echo "contract_violation"
+  else
+    echo "unknown"
+  fi
+}
+
+select_repair_command() {
+  local cmd=""
+  SELECTED_REPAIR_CMD=""
+  SELECTED_REPAIR_SOURCE=""
+  if [[ -n "$REPAIR_CMD" ]]; then
+    SELECTED_REPAIR_SOURCE="${REPAIR_CMD_SOURCE:-cli}"
+    SELECTED_REPAIR_CMD="$REPAIR_CMD"
+    return 0
+  fi
+
+  cmd=$(policy_command_for "$LAST_FAILURE_KIND")
+  if [[ -n "$cmd" ]]; then
+    SELECTED_REPAIR_SOURCE="policy:$LAST_FAILURE_KIND"
+    SELECTED_REPAIR_CMD="$cmd"
+    return 0
+  fi
+
+  cmd=$(policy_command_for "default")
+  if [[ -n "$cmd" ]]; then
+    SELECTED_REPAIR_SOURCE="policy:default"
+    SELECTED_REPAIR_CMD="$cmd"
+    return 0
+  fi
+
+  return 1
+}
+
+load_repair_policy
 
 RUN_ID="$(date +%Y%m%d_%H%M%S)_$$"
 RUN_DIR="$PL_OUTPUT/agent-runs/$CHANGE/$RUN_ID"
@@ -118,6 +263,12 @@ run_executor_command() {
     export PL_RUN_DIR="$RUN_DIR"
     export PL_AGENT_EXECUTOR="$EXECUTOR"
     export PL_AGENT_ATTEMPT="$attempt"
+    if [[ -n "$LAST_FAILURE_KIND" ]]; then
+      export PL_FAILURE_KIND="$LAST_FAILURE_KIND"
+    fi
+    if [[ -n "$SELECTED_REPAIR_SOURCE" ]]; then
+      export PL_REPAIR_SOURCE="$SELECTED_REPAIR_SOURCE"
+    fi
     if [[ -n "$REPAIR_CONTEXT" ]]; then
       export PL_REPAIR_CONTEXT="$REPAIR_CONTEXT"
     fi
@@ -178,10 +329,17 @@ run_verify_gate() {
 
   LAST_GATE_RC=$rc
   LAST_GATE_RESULT="$result"
+  if [[ $rc -eq 0 ]]; then
+    LAST_FAILURE_KIND=""
+  else
+    LAST_FAILURE_KIND=$(classify_failure "$log_file")
+  fi
   trace_emit "agent.gate.result" "$(jq -nc \
     --arg run_id "$RUN_ID" --arg gate "$VERIFY_GATE" --arg result "$result" \
-    --arg log "$log_file" --argjson attempt "$attempt" --argjson exit_code "$rc" \
-    '{run_id:$run_id,gate:$gate,attempt:$attempt,result:$result,exit_code:$exit_code,log:$log}')"
+    --arg log "$log_file" --arg failure_kind "$LAST_FAILURE_KIND" \
+    --argjson attempt "$attempt" --argjson exit_code "$rc" \
+    '{run_id:$run_id,gate:$gate,attempt:$attempt,result:$result,exit_code:$exit_code,log:$log}
+     + (if $failure_kind != "" then {failure_kind:$failure_kind} else {} end)')"
 
   if [[ $rc -eq 0 ]]; then
     log_ok "gate $VERIFY_GATE passed"
@@ -205,6 +363,8 @@ write_repair_context() {
     printf -- '- executor: `%s`\n' "$EXECUTOR"
     printf -- '- run_id: `%s`\n' "$RUN_ID"
     printf -- '- failed_attempt: `%s`\n' "$attempt"
+    printf -- '- failure_kind: `%s`\n' "${LAST_FAILURE_KIND:-unknown}"
+    printf -- '- repair_source: `%s`\n' "${SELECTED_REPAIR_SOURCE:-unknown}"
     printf -- '- next_attempt_command: `%s`\n\n' "$next_command"
 
     printf '## Agent command output\n\n```text\n'
@@ -227,12 +387,14 @@ write_repair_context() {
   REPAIR_CONTEXT="$context_file"
   trace_artifact create "$context_file" "$(jq -nc \
     --arg run_id "$RUN_ID" --arg kind "repair_context" --arg gate "$VERIFY_GATE" \
+    --arg failure_kind "${LAST_FAILURE_KIND:-unknown}" --arg repair_source "${SELECTED_REPAIR_SOURCE:-unknown}" \
     --argjson attempt "$attempt" \
-    '{run_id:$run_id,kind:$kind,gate:$gate,failed_attempt:$attempt}')"
+    '{run_id:$run_id,kind:$kind,gate:$gate,failed_attempt:$attempt,failure_kind:$failure_kind,repair_source:$repair_source}')"
   trace_emit "agent.repair.context" "$(jq -nc \
     --arg run_id "$RUN_ID" --arg path "$context_file" --arg gate "$VERIFY_GATE" \
+    --arg failure_kind "${LAST_FAILURE_KIND:-unknown}" --arg repair_source "${SELECTED_REPAIR_SOURCE:-unknown}" \
     --argjson attempt "$attempt" \
-    '{run_id:$run_id,path:$path,gate:$gate,failed_attempt:$attempt}')"
+    '{run_id:$run_id,path:$path,gate:$gate,failed_attempt:$attempt,failure_kind:$failure_kind,repair_source:$repair_source}')"
 
   log_info "repair context: $context_file"
 }
@@ -275,8 +437,9 @@ while :; do
     break
   fi
 
-  if [[ -z "$REPAIR_CMD" ]]; then
-    log_warn "no --repair-cmd provided; stopping after blocked gate"
+  select_repair_command
+  if [[ -z "$SELECTED_REPAIR_CMD" ]]; then
+    log_warn "no repair command available for failure_kind=${LAST_FAILURE_KIND:-unknown}; stopping after blocked gate"
     break
   fi
   if [[ "$ATTEMPT" -ge "$MAX_RETRIES" ]]; then
@@ -284,18 +447,21 @@ while :; do
     break
   fi
 
-  write_repair_context "$ATTEMPT" "$RUN_CMD_LOG" "$GATE_LOG" "$REPAIR_CMD"
+  write_repair_context "$ATTEMPT" "$RUN_CMD_LOG" "$GATE_LOG" "$SELECTED_REPAIR_CMD"
   ATTEMPT=$((ATTEMPT + 1))
   KIND="repair"
-  COMMAND="$REPAIR_CMD"
+  COMMAND="$SELECTED_REPAIR_CMD"
 done
 
 trace_emit "agent.run.complete" "$(jq -nc \
   --arg run_id "$RUN_ID" --arg status "$STATUS" --arg gate "$VERIFY_GATE" \
   --arg gate_result "$LAST_GATE_RESULT" --arg run_dir "$RUN_DIR" \
+  --arg failure_kind "$LAST_FAILURE_KIND" --arg repair_source "$SELECTED_REPAIR_SOURCE" \
   --argjson attempts "$((ATTEMPT + 1))" --argjson command_exit "$LAST_CMD_RC" --argjson gate_exit "$LAST_GATE_RC" \
   '{run_id:$run_id,status:$status,attempts:$attempts,command_exit_code:$command_exit,gate_exit_code:$gate_exit,run_dir:$run_dir}
-   + (if $gate != "" then {gate:$gate,gate_result:$gate_result} else {} end)')"
+   + (if $gate != "" then {gate:$gate,gate_result:$gate_result} else {} end)
+   + (if $failure_kind != "" then {failure_kind:$failure_kind} else {} end)
+   + (if $repair_source != "" then {repair_source:$repair_source} else {} end)')"
 
 trace_task end "$TASK_ID" "$(jq -nc --arg status "$STATUS" --arg run_id "$RUN_ID" '{status:$status,run_id:$run_id}')"
 

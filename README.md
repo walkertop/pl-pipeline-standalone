@@ -189,11 +189,25 @@ PL_PROJECT=/path/to/project pl agent run \
 
 失败时会生成 `pipeline-output/agent-runs/<change>/<run-id>/repair-context-attempt-*.md`，并把 `agent.run.*` / `agent.gate.*` / `agent.repair.*` 写入同一条 trace。
 
+稳定项目也可以在 `pl/config.yaml` 中声明 repair policy：
+
+```yaml
+agent:
+  repair:
+    max_retries: 1
+    strategy:
+      test_failure: "./scripts/repair_test_failure.sh"
+      default: "./scripts/repair_default.sh"
+```
+
 可运行 demo：
 
 ```bash
 bash examples/demo-agent-loop/run-demo.sh
+bash examples/demo-agent-crud-service/run-demo.sh
 ```
+
+完整说明见 [`docs/agent-execution-loop.md`](./docs/agent-execution-loop.md)。
 
 ### 后续 CDC 闭环（v1.7+）
 

@@ -1,0 +1,23 @@
+version: pl@v1.1
+namespace: demo-agent-crud-service
+requires:
+  pl_version: ">=1.12"
+agent:
+  repair:
+    max_retries: 1
+    strategy:
+      test_failure: "./scripts/repair_test_failure.sh"
+      default: "./scripts/repair_default.sh"
+checks:
+  - id: unit_tests
+    label: "Python unit tests"
+    cmd: "python3 -m unittest discover -s tests"
+    cwd: "."
+    required: true
+gates:
+  D:
+    from: IMPLEMENT
+    to: VERIFY
+    eval: all_checks.pass
+    on_failure: block
+    checks: [unit_tests]
