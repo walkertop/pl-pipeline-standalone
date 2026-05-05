@@ -198,6 +198,10 @@ pl agent run \
   --change add-search \
   --task T03 \
   --executor local \
+  --provider openai \
+  --model codex-local-test \
+  --input-artifact pl/changes/add-search/taskdag.md \
+  --output-artifact app/search.py \
   --cmd "./scripts/agent-implement.sh" \
   --verify-gate D \
   --repair-cmd "./scripts/agent-repair.sh" \

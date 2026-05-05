@@ -219,6 +219,67 @@ fi
 
 rm -rf "$TMPDIR_POLICY"
 
+tc_case "pl agent run records agent trace metadata"
+TMPDIR_TRACE=$(mktemp -d)
+mkdir -p "$TMPDIR_TRACE/scripts" "$TMPDIR_TRACE/prompts" "$TMPDIR_TRACE/specs" "$TMPDIR_TRACE/app" "$TMPDIR_TRACE/pl/changes/agent-trace-demo"
+
+cat > "$TMPDIR_TRACE/pl/config.yaml" <<'YML'
+version: pl@v1.1
+namespace: demo-agent-trace
+YML
+
+cat > "$TMPDIR_TRACE/prompts/implement.md" <<'MD'
+Implement the trace demo.
+MD
+cat > "$TMPDIR_TRACE/specs/spec.md" <<'MD'
+# Trace Demo Spec
+MD
+cat > "$TMPDIR_TRACE/scripts/write_output.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+cat > app/result.txt <<'TXT'
+trace metadata ok
+TXT
+SH
+chmod +x "$TMPDIR_TRACE/scripts/write_output.sh"
+
+set +e
+out=$(cd "$TMPDIR_TRACE" && PL_PROJECT="$TMPDIR_TRACE" PL_HOME="$REPO_ROOT" "$PL" agent run \
+  --change agent-trace-demo \
+  --task T01 \
+  --executor local \
+  --provider openai \
+  --model codex-local-test \
+  --prompt-path prompts/implement.md \
+  --input-artifact specs/spec.md \
+  --output-artifact app/result.txt \
+  --tool-call shell \
+  --tokens-input 123 \
+  --tokens-output 45 \
+  --cmd "./scripts/write_output.sh" \
+  --json 2>&1)
+rc=$?
+set -e
+
+trace_meta="$TMPDIR_TRACE/pipeline-output/trace/agent-trace-demo.events.jsonl"
+if [[ $rc -eq 0 ]] \
+   && [[ -f "$trace_meta" ]] \
+   && grep -q '"provider":"openai"' "$trace_meta" \
+   && grep -q '"model":"codex-local-test"' "$trace_meta" \
+   && grep -q '"prompt_path":"prompts/implement.md"' "$trace_meta" \
+   && grep -Fq '"input_artifacts":["specs/spec.md"]' "$trace_meta" \
+   && grep -Fq '"output_artifacts":["app/result.txt"]' "$trace_meta" \
+   && grep -Fq '"tool_calls":["shell"]' "$trace_meta" \
+   && grep -Fq '"tokens":{"input":123,"output":45,"total":168}' "$trace_meta" \
+   && grep -q '"status":"passed"' "$trace_meta"; then
+  tc_ok
+else
+  tc_fail "expected agent trace metadata in trace; rc=$rc output:
+    $out"
+fi
+
+rm -rf "$TMPDIR_TRACE"
+
 tc_case "demo-agent-crud-service runs a real CRUD repair loop"
 set +e
 out=$(PL_HOME="$REPO_ROOT" bash "$REPO_ROOT/examples/demo-agent-crud-service/run-demo.sh" 2>&1)

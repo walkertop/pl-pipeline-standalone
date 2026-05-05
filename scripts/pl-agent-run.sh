@@ -8,6 +8,8 @@
 #   pl-agent-run.sh --change <id> --cmd <command> --verify-gate D \
 #     --repair-cmd <command> --max-retries 1 [--json]
 #   # 或在 pl/config.yaml 配置 agent.repair.strategy.<failure_kind>
+#   # 可选 agent trace metadata: --provider / --model / --prompt-path /
+#   #   --input-artifact / --output-artifact / --tool-call / --tokens-input / --tokens-output
 #
 # 职责：
 #   1. 执行一个 agent/executor 命令
@@ -43,6 +45,14 @@ log_error() { echo "${RED}✗${NC}  $*" >&2; }
 CHANGE=""
 TASK_ID="manual"
 EXECUTOR="local"
+PROVIDER=""
+MODEL=""
+PROMPT_PATH=""
+INPUT_ARTIFACTS=()
+OUTPUT_ARTIFACTS=()
+TOOL_CALLS=()
+TOKENS_INPUT=""
+TOKENS_OUTPUT=""
 CMD=""
 VERIFY_GATE=""
 REPAIR_CMD=""
@@ -72,6 +82,14 @@ while [[ $# -gt 0 ]]; do
     --change)      require_value "$1" "${2:-}"; CHANGE="$2"; shift 2 ;;
     --task)        require_value "$1" "${2:-}"; TASK_ID="$2"; shift 2 ;;
     --executor)    require_value "$1" "${2:-}"; EXECUTOR="$2"; shift 2 ;;
+    --provider)    require_value "$1" "${2:-}"; PROVIDER="$2"; shift 2 ;;
+    --model)       require_value "$1" "${2:-}"; MODEL="$2"; shift 2 ;;
+    --prompt-path) require_value "$1" "${2:-}"; PROMPT_PATH="$2"; shift 2 ;;
+    --input-artifact)  require_value "$1" "${2:-}"; INPUT_ARTIFACTS+=("$2"); shift 2 ;;
+    --output-artifact) require_value "$1" "${2:-}"; OUTPUT_ARTIFACTS+=("$2"); shift 2 ;;
+    --tool-call)   require_value "$1" "${2:-}"; TOOL_CALLS+=("$2"); shift 2 ;;
+    --tokens-input)  require_value "$1" "${2:-}"; TOKENS_INPUT="$2"; shift 2 ;;
+    --tokens-output) require_value "$1" "${2:-}"; TOKENS_OUTPUT="$2"; shift 2 ;;
     --cmd)         require_value "$1" "${2:-}"; CMD="$2"; shift 2 ;;
     --verify-gate) require_value "$1" "${2:-}"; VERIFY_GATE="$2"; shift 2 ;;
     --repair-cmd)  require_value "$1" "${2:-}"; REPAIR_CMD="$2"; REPAIR_CMD_SOURCE="cli"; shift 2 ;;
@@ -88,6 +106,54 @@ if ! [[ "$MAX_RETRIES" =~ ^[0-9]+$ ]]; then
   log_error "--max-retries must be a non-negative integer"
   exit 2
 fi
+if [[ -n "$TOKENS_INPUT" && ! "$TOKENS_INPUT" =~ ^[0-9]+$ ]]; then
+  log_error "--tokens-input must be a non-negative integer"
+  exit 2
+fi
+if [[ -n "$TOKENS_OUTPUT" && ! "$TOKENS_OUTPUT" =~ ^[0-9]+$ ]]; then
+  log_error "--tokens-output must be a non-negative integer"
+  exit 2
+fi
+
+json_array_from_lines() {
+  jq -Rsc 'split("\n") | map(select(length > 0))'
+}
+
+agent_trace_meta_json() {
+  local input_json output_json tool_json token_in token_out token_total
+  input_json=$(printf '%s\n' "${INPUT_ARTIFACTS[@]:-}" | json_array_from_lines)
+  output_json=$(printf '%s\n' "${OUTPUT_ARTIFACTS[@]:-}" | json_array_from_lines)
+  tool_json=$(printf '%s\n' "${TOOL_CALLS[@]:-}" | json_array_from_lines)
+  token_in="${TOKENS_INPUT:-0}"
+  token_out="${TOKENS_OUTPUT:-0}"
+  token_total=$((token_in + token_out))
+
+  jq -nc \
+    --arg provider "$PROVIDER" \
+    --arg model "$MODEL" \
+    --arg prompt "$PROMPT_PATH" \
+    --argjson input_artifacts "$input_json" \
+    --argjson output_artifacts "$output_json" \
+    --argjson tool_calls "$tool_json" \
+    --argjson token_in "$token_in" \
+    --argjson token_out "$token_out" \
+    --argjson token_total "$token_total" \
+    '{}
+     + (if $provider != "" then {provider:$provider} else {} end)
+     + (if $model != "" then {model:$model} else {} end)
+     + (if $prompt != "" then {prompt_path:$prompt} else {} end)
+     + (if ($input_artifacts|length) > 0 then {input_artifacts:$input_artifacts} else {} end)
+     + (if ($output_artifacts|length) > 0 then {output_artifacts:$output_artifacts} else {} end)
+     + (if ($tool_calls|length) > 0 then {tool_calls:$tool_calls} else {} end)
+     + (if ($token_in + $token_out) > 0 then {tokens:{input:$token_in,output:$token_out,total:$token_total}} else {} end)'
+}
+
+AGENT_TRACE_META="$(agent_trace_meta_json)"
+
+merge_agent_trace_meta() {
+  local base="$1"
+  jq -cn --argjson base "$base" --argjson meta "$AGENT_TRACE_META" '$base + $meta'
+}
 
 load_repair_policy() {
   local cfg="$PL_PROJECT/pl/config.yaml"
@@ -253,7 +319,8 @@ run_executor_command() {
   trace_emit "agent.run.start" "$(jq -nc \
     --arg run_id "$RUN_ID" --arg executor "$EXECUTOR" --arg task "$TASK_ID" \
     --arg kind "$kind" --arg cmd "$command" --argjson attempt "$attempt" \
-    '{run_id:$run_id,executor:$executor,task_id:$task,kind:$kind,attempt:$attempt,cmd:$cmd}')"
+    '{run_id:$run_id,executor:$executor,task_id:$task,kind:$kind,attempt:$attempt,cmd:$cmd}' \
+    | jq -c --argjson meta "$AGENT_TRACE_META" '. + $meta')"
 
   (
     cd "$PL_PROJECT" || exit 1
@@ -283,13 +350,15 @@ run_executor_command() {
     --arg run_id "$RUN_ID" --arg executor "$EXECUTOR" --arg task "$TASK_ID" \
     --arg kind "$kind" --arg log "$log_file" --argjson attempt "$attempt" \
     --argjson exit_code "$rc" --argjson duration "$duration" \
-    '{run_id:$run_id,executor:$executor,task_id:$task,kind:$kind,attempt:$attempt,exit_code:$exit_code,duration_sec:$duration,log:$log}')"
+    '{run_id:$run_id,executor:$executor,task_id:$task,kind:$kind,attempt:$attempt,exit_code:$exit_code,duration_sec:$duration,log:$log}' \
+    | jq -c --argjson meta "$AGENT_TRACE_META" '. + $meta')"
 
   if [[ "$kind" == "repair" ]]; then
     trace_emit "agent.repair.result" "$(jq -nc \
       --arg run_id "$RUN_ID" --arg context "$REPAIR_CONTEXT" --arg log "$log_file" \
       --argjson attempt "$attempt" --argjson exit_code "$rc" \
-      '{run_id:$run_id,attempt:$attempt,exit_code:$exit_code,context:$context,log:$log}')"
+      '{run_id:$run_id,attempt:$attempt,exit_code:$exit_code,context:$context,log:$log}' \
+      | jq -c --argjson meta "$AGENT_TRACE_META" '. + $meta')"
   fi
 
   if [[ $rc -eq 0 ]]; then
@@ -402,7 +471,8 @@ write_repair_context() {
 trace_init "$CHANGE" "IMPLEMENT" "agent:$EXECUTOR"
 trace_task start "$TASK_ID" "$(jq -nc \
   --arg run_id "$RUN_ID" --arg executor "$EXECUTOR" \
-  '{run_id:$run_id,executor:$executor,loop:"agent_execution"}')"
+  '{run_id:$run_id,executor:$executor,loop:"agent_execution"}' \
+  | jq -c --argjson meta "$AGENT_TRACE_META" '. + $meta')"
 
 echo "${BOLD}━━━ Agent Execution Loop ━━━${NC}"
 echo "  change:   $CHANGE"
@@ -461,7 +531,8 @@ trace_emit "agent.run.complete" "$(jq -nc \
   '{run_id:$run_id,status:$status,attempts:$attempts,command_exit_code:$command_exit,gate_exit_code:$gate_exit,run_dir:$run_dir}
    + (if $gate != "" then {gate:$gate,gate_result:$gate_result} else {} end)
    + (if $failure_kind != "" then {failure_kind:$failure_kind} else {} end)
-   + (if $repair_source != "" then {repair_source:$repair_source} else {} end)')"
+   + (if $repair_source != "" then {repair_source:$repair_source} else {} end)' \
+  | jq -c --argjson meta "$AGENT_TRACE_META" '. + $meta')"
 
 trace_task end "$TASK_ID" "$(jq -nc --arg status "$STATUS" --arg run_id "$RUN_ID" '{status:$status,run_id:$run_id}')"
 
@@ -474,7 +545,8 @@ echo "  trace:  $PL_OUTPUT/trace/$CHANGE.events.jsonl"
 if $JSON_OUT; then
   jq -nc --arg status "$STATUS" --arg run_id "$RUN_ID" --arg run_dir "$RUN_DIR" \
     --arg trace "$PL_OUTPUT/trace/$CHANGE.events.jsonl" \
-    '{status:$status,run_id:$run_id,run_dir:$run_dir,trace:$trace}'
+    '{status:$status,run_id:$run_id,run_dir:$run_dir,trace:$trace}' \
+    | jq -c --argjson meta "$AGENT_TRACE_META" '. + $meta'
 fi
 
 if [[ "$STATUS" == "passed" ]]; then

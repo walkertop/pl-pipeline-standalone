@@ -13,6 +13,7 @@
 
 - `pl agent run`：Agent Execution Loop MVP，本地 executor 执行命令后可调用 gate 验证，失败时生成 repair context，并在 retry 预算内执行修复命令。
 - `agent.repair.strategy`：可在 `pl/config.yaml` 按 `failure_kind` 配置 repair policy，替代每次手写 `--repair-cmd`。
+- `pl agent run` trace metadata：新增 `--provider` / `--model` / `--prompt-path` / `--input-artifact` / `--output-artifact` / `--tool-call` / `--tokens-*`，为外部 executor adapter 预留统一观测模型。
 - `examples/demo-agent-loop`：可验证 demo，故意写入错误 Python 实现，再通过 gate 失败上下文修复到 `unittest` 通过。
 - `examples/demo-agent-crud-service`：更接近业务任务的 CRUD demo，展示 `policy:test_failure` 自动修复闭环。
 - `tests/cli/test-pl-agent.sh`：覆盖 agent loop 的执行、repair context、trace 事件和最终 gate 通过路径。
