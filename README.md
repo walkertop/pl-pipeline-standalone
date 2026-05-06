@@ -156,6 +156,7 @@ direnv allow
 ```
 
 > **多模块项目？** 用 `--stack monorepo-trio`，详细见 [`docs/guides/monorepo-quickstart.md`](./docs/guides/monorepo-quickstart.md)。
+> **新项目如何导入？** 见 [`docs/guides/new-project-adoption.md`](./docs/guides/new-project-adoption.md)。
 > **完整 CLI 清单**：`pl help` 或 [`docs/cli-reference.md`](./docs/cli-reference.md)。
 > **不喜欢 `pl new`？** 老的"手动 cp config + adapter install"流程 100% 仍可用。
 
