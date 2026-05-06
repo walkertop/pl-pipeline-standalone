@@ -1,4 +1,4 @@
-# pl CLI Reference (v1.10.0+)
+# pl CLI Reference (v1.12.0+)
 
 > 单入口 `pl <subcmd>` 取代散落的 `bash $PL_HOME/scripts/*.sh`。
 > dispatcher 0 业务逻辑，**所有 flag 透传给底层脚本**，老路径 100% 向后兼容。
@@ -54,6 +54,7 @@ pl doctor
 | `pl init <change-id> [...]` | `pl-state-init.sh` | 创建 change 骨架（`.state.md` + 初始 `workflow.start` 事件） |
 | `pl status [<change-id>]` | `pl-status.sh` | 状态总览 / 单 change 详情 / `--json` / `--self-check` |
 | `pl run --change <id> --gate <g>` | `pl-runner.sh` | 统一 gate / check 执行器，`--dry-run` / `--json` |
+| `pl agent run --change <id> --cmd <cmd>` | `pl-agent-run.sh` | Agent 执行闭环：命令 → gate → failure kind → repair policy/context → retry → trace |
 | `pl phase <change-id> <action> ...` | `pl-phase.sh` | 手动推进阶段，自动写 trace + 更新 `.state.md` |
 | `pl orchestrator --page <id>` | `pipeline-orchestrator.sh` | Agentic workflow 全流程编排 |
 | `pl smoke --change <id>` | `pl-smoke.sh` | 端到端冒烟（boot → ready → probe → shutdown） |
@@ -128,6 +129,7 @@ dispatcher 不解析 flag，子命令的所有参数原样转交底层脚本。
 - `pl piao <verb>`      ← 快照 / 内核演进
 - `pl dashboard [refresh]` ← dashboard 主/辅
 - `pl observe [check]`     ← observer fs vs 校验
+- `pl agent run`           ← agent/executor 执行闭环
 
 其余直接 1:1 顶层暴露（`pl init / status / run / smoke / phase / ...`）。
 
@@ -190,6 +192,26 @@ pl contract query --capability auth.session.read
 
 # 看看 adapter 有谁在用
 pl contract query --adapter adapter-nextjs-web --kind capability
+
+# Agent execution loop MVP：执行、验收、失败后给 repair 命令上下文
+pl agent run \
+  --change add-search \
+  --task T03 \
+  --executor local \
+  --provider openai \
+  --model codex-local-test \
+  --input-artifact pl/changes/add-search/taskdag.md \
+  --output-artifact app/search.py \
+  --cmd "./scripts/agent-implement.sh" \
+  --verify-gate D \
+  --repair-cmd "./scripts/agent-repair.sh" \
+  --max-retries 1
+
+# 或在 pl/config.yaml 写 agent.repair.strategy，让 pl 按 failure_kind 自动选 repair
+bash examples/demo-agent-crud-service/run-demo.sh
+
+# Codex CLI executor（demo 使用 fake codex，不要求登录态）
+bash examples/demo-agent-codex-cli/run-demo.sh
 
 # 一键 dashboard
 pl dashboard --open --port 8889

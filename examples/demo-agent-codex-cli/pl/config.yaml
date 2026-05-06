@@ -1,0 +1,4 @@
+version: pl@v1.1
+namespace: demo-agent-codex-cli
+requires:
+  pl_version: ">=1.12"

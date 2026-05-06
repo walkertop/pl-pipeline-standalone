@@ -64,6 +64,10 @@ coverage/
 /playwright-report/
 /playwright/.cache/
 
+# ---- Python ----
+__pycache__/
+*.py[cod]
+
 # ---- pl-pipeline runtime outputs ----
 # 运行时产物不入版本控制（每个宿主项目自己产出）
 pipeline-output/
@@ -90,6 +94,9 @@ examples/*/build/
 examples/*/.pytest_cache/
 examples/*/.mypy_cache/
 examples/*/.ruff_cache/
+examples/*/.tmp-bin/
+examples/*/codex-invocation.log
+examples/demo-agent-codex-cli/app/codex-result.txt
 
 # 以下必须提交（作为 pl-pipeline 真实运行过的证据）
 !examples/*/pl/

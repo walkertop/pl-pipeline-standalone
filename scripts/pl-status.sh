@@ -254,7 +254,7 @@ emit_json() {
     exit 1
   fi
   local py
-  py=$(mktemp /tmp/pl-status.XXXXXX.py)
+  py=$(mktemp /tmp/pl-status.XXXXXX)
   # 安装 EXIT 兜底清理（避免异常时残留 /tmp 文件）
   trap "rm -f '$py'" EXIT
   cat > "$py" <<'PY'
@@ -332,7 +332,7 @@ PY
 schema_check() {
   local json_content="$1"
   local py
-  py=$(mktemp /tmp/pl-schema-check.XXXXXX.py)
+  py=$(mktemp /tmp/pl-schema-check.XXXXXX)
   trap "rm -f '$py'" RETURN
   cat > "$py" <<'PY'
 import json, sys
@@ -399,7 +399,7 @@ human_table() {
   local json_out
   json_out=$(emit_json)
   local py
-  py=$(mktemp /tmp/pl-human.XXXXXX.py)
+  py=$(mktemp /tmp/pl-human.XXXXXX)
   trap "rm -f '$py'" RETURN
   cat > "$py" <<'PY'
 import json, os, sys
